@@ -13,70 +13,36 @@ Read in order:
 
 ## Backend Mission
 
-Build the deterministic SmartTruck backend:
+Serve the Damm operational data the frontend needs:
 
 - Load real Damm/DDI data.
 - Normalize into the shared models.
-- Run route optimization.
-- Run truck load planning.
-- Generate warehouse pick list.
-- Emit WebSocket progress.
-- Return `OptimizationResult`.
-- Optionally generate explanations using OpenAI Agents SDK.
+- Expose the directory endpoints consumed by the frontend
+  (`/api/v1/db/customers`, `/api/v1/db/drivers`, `/api/v1/db/trucks`).
+- Expose `/api/v1/data/centers` once the `Center` model is implemented
+  (see `wiki/decisions/2026-05-09-centers-model.md`).
+- Geocode customers and centers so `lat`/`lng` are populated.
+- Health endpoint.
+
+Optimization, load planning, pick lists, WebSocket progress, exports, and
+OpenAI explanations are **not in current scope**. If they're added later,
+contract them through `wiki/decisions/` first.
 
 ## Contract Rules
 
 - Implement Pydantic models from `wiki/contracts/data-models.md`.
-- Use `/api/v1/optimize/full` as the main optimization endpoint.
-- Use `/ws/jobs/{job_id}` for progress updates.
-- Emit exact WebSocket `type` values: `progress`, `partial`, `result`, `done`, `error`.
-- Emit exact progress phase keys from `api-contract.md`.
+- Keep JSON field names snake_case.
 - Do not rename fields without a contract proposal.
+- Adding optional fields is allowed; renaming or removing is not.
 
 ## Implementation Order
 
-1. Pydantic enums and models.
+1. Pydantic enums and models from the shared contract.
 2. Health endpoint.
-3. Data loader.
-4. Transport summary/detail endpoints.
-5. Job manager and WebSocket endpoint.
-6. Fallback route solver.
-7. OR-Tools route solver.
-8. Pallet/load planner.
-9. Pick list generator.
-10. Visualization payload builder.
-11. Export endpoints.
-12. Optional OpenAI explanation service.
-
-## Optimization Rules
-
-Route:
-
-- Start with haversine matrix and nearest neighbor + 2-opt.
-- Add OR-Tools once fallback works.
-- Time windows should be respected when clean; ambiguous missing data should degrade gracefully.
-
-Load:
-
-- Use pallet/layer model, not full 3D bin packing.
-- Use product categories from the shared enum.
-- Reserve returnable pallet capacity when `include_returnables` is true.
-- Generate `LoadPlan.pick_list`.
-
-## Agent Explanation Rules
-
-OpenAI Agents SDK may be used only after deterministic route/load results exist.
-
-Agent output must reference computed facts:
-
-- route distance
-- time windows
-- pallet utilization
-- returnable risk
-- pick list
-- warnings
-
-Never let the agent invent stops, products, route metrics, or load assignments.
+3. Data loader (Excel → normalized records).
+4. `/api/v1/db/customers`, `/api/v1/db/drivers`, `/api/v1/db/trucks`.
+5. Geocoding for customers (and centers when added).
+6. `/api/v1/data/centers`.
 
 ## Logging Wiki Changes
 
@@ -86,4 +52,3 @@ If you change the backend contract:
 2. Add a line to `wiki/log.md`.
 3. Add a decision page in `wiki/decisions/`.
 4. Mention the contract change in your final response or PR notes.
-

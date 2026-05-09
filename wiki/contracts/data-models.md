@@ -1,6 +1,7 @@
 # Data Models Contract
 
-This page is the shared model contract between backend and frontend. The content may evolve, but field names, enum values, and message types must not change silently.
+Shared model contract between backend and frontend. Field names, enum
+values, and message types must not change silently.
 
 The models are derived from DDI operational documents:
 
@@ -8,7 +9,9 @@ The models are derived from DDI operational documents:
 - Hoja Ruta: driver route sheet.
 - Albaran: delivery invoice.
 
-## Backend File Targets
+## File Targets
+
+Backend (Python / Pydantic):
 
 ```txt
 app/domain/models.py
@@ -16,12 +19,13 @@ app/domain/enums.py
 app/api/schemas.py
 ```
 
-## Frontend File Targets
+Frontend (TypeScript / Zod):
 
 ```txt
-lib/schemas/domain.ts
-lib/schemas/ws.ts
-lib/api/generated.ts
+src/lib/schemas/domain.ts
+src/lib/api/catalog.ts        # Customer / Driver / Truck for /db/* endpoints
+src/components/centers/columns.tsx   # Center (frontend mock)
+src/components/routes/columns.tsx    # Route (frontend mock)
 ```
 
 ## Enums
@@ -66,15 +70,6 @@ class ProductCategory(str, Enum):
 class TimeWindow(BaseModel):
     open: time
     close: time
-
-    @property
-    def duration_minutes(self) -> int:
-        open_minutes = self.open.hour * 60 + self.open.minute
-        close_minutes = self.close.hour * 60 + self.close.minute
-        return close_minutes - open_minutes
-
-    def is_tight(self) -> bool:
-        return self.duration_minutes <= 30
 ```
 
 ## Product Models
@@ -113,6 +108,9 @@ class ReturnableItem(BaseModel):
 
 ## Delivery Models
 
+Used by the route map's stop list (currently driven by the
+`route-stops.ts` mock; real data will come from the backend).
+
 ```python
 class DeliveryStop(BaseModel):
     stop_id: str
@@ -137,98 +135,10 @@ class DeliveryStop(BaseModel):
     distance_from_prev_km: float | None = None
 ```
 
-## Pallet And Load Models
-
-```python
-class PalletItem(BaseModel):
-    product: ProductLine
-    layer: int
-    column: int
-    stack_height_cm: float
-
-class Pallet(BaseModel):
-    pallet_index: int
-    pallet_id: str
-    stop_ids: list[str]
-    is_returnables: bool = False
-    items: list[PalletItem] = []
-    total_height_cm: float = 0.0
-    total_weight_kg: float = 0.0
-    total_volume_l: float = 0.0
-    position_in_truck: dict = Field(default_factory=dict)
-
-class PickInstruction(BaseModel):
-    sequence: int
-    warehouse_location: str
-    material_code: str
-    description: str
-    quantity: int
-    unit: ProductUnit
-    pallet_id: str
-    stop_id: str
-
-class LoadPlan(BaseModel):
-    transport_id: str
-    truck_type: TruckType
-    vehicle_id: str | None = None
-    date: date
-    pallets: list[Pallet]
-    pick_list: list[PickInstruction]
-    items_no_location: list[ProductLine] = []
-    return_pallet: Pallet | None = None
-    total_units_delivery: int = 0
-    total_units_return: int = 0
-    total_volume_delivery_l: float = 0.0
-    total_volume_return_l: float = 0.0
-    total_weight_delivery_kg: float = 0.0
-    total_weight_return_kg: float = 0.0
-    pallet_slots_used: int = 0
-    pallet_slots_total: int = 0
-
-    @property
-    def utilization_pct(self) -> float:
-        if self.pallet_slots_total == 0:
-            return 0.0
-        return round(self.pallet_slots_used / self.pallet_slots_total * 100, 1)
-```
-
-## Route And Optimization Models
-
-```python
-class RouteResult(BaseModel):
-    transport_id: str
-    route_code: str
-    driver_id: str
-    driver_name: str
-    truck_type: TruckType
-    vehicle_id: str | None = None
-    date: date
-    shift: Literal[1, 2] = 1
-    ordered_stops: list[DeliveryStop]
-    total_distance_km: float = 0.0
-    total_time_min: float = 0.0
-    total_stops: int = 0
-    total_invoice_value: Decimal = Decimal("0")
-    total_cash_to_collect: Decimal = Decimal("0")
-    time_window_violations: list[str] = []
-    has_tight_windows: bool = False
-    baseline_distance_km: float | None = None
-    distance_improvement_pct: float | None = None
-    explanation: str | None = None
-
-class OptimizationResult(BaseModel):
-    job_id: str
-    transport_id: str
-    status: Literal["pending", "running", "done", "error"]
-    created_at: datetime
-    completed_at: datetime | None = None
-    route: RouteResult | None = None
-    load: LoadPlan | None = None
-    viz: TruckVisualization | None = None
-    error_message: str | None = None
-```
-
 ## Visualization Models
+
+Used by the truck wireframe scene
+(`src/components/routes/TruckWireframeScene.tsx`).
 
 ```python
 class TruckVisualization(BaseModel):
@@ -258,104 +168,91 @@ z = height.
 Units are centimeters.
 ```
 
-## Request / Response Schemas
+## Directory Models
+
+These back the `/clients`, `/drivers`, `/trucks` pages via
+`/api/v1/db/*`. Frontend Zod definitions live in
+`src/lib/api/catalog.ts`.
 
 ```python
-class OptimizeRequest(BaseModel):
-    transport_id: str
-    truck_type: TruckType = TruckType.TRUCK_6
-    date: date | None = None
-    use_real_roads: bool = False
-    respect_time_windows: bool = True
-    include_returnables: bool = True
-    solver_time_limit_s: int = Field(default=15, ge=5, le=60)
-
-class TransportSummary(BaseModel):
-    transport_id: str
-    route_code: str
-    driver_name: str
-    date: date
-    stop_count: int
-    truck_type: TruckType
-
-class CustomerDetail(BaseModel):
-    customer_id: str
+class Customer(BaseModel):
+    id: int
+    code: str
     name: str
-    address: str
-    city: str
-    postal_code: str
-    lat: float | None
-    lng: float | None
-    time_windows: dict[int, TimeWindow]
+    name_2: str | None = None
+    address: str | None = None
+    postal_code: str | None = None
+    city: str | None = None
+    payment_condition: str | None = None
+    service_notes: str | None = None
+    lat: float | None = None
+    lng: float | None = None
 
-class HealthResponse(BaseModel):
-    status: Literal["ok"] = "ok"
-    data_loaded: bool
-    customer_count: int
-    transport_count: int
-    geocoded_count: int
+class Driver(BaseModel):
+    id: int
+    code: str
+    name: str
 
+class Truck(BaseModel):
+    id: int
+    code: str
+    plate: str | None = None
+    truck_type: str
+    capacity_pallets: int
+    warehouse_id: int | None = None
+    active: bool
+```
+
+## Center
+
+Backs the centers picker on `/`. Defined in
+`src/components/centers/columns.tsx`; sample data in
+`src/components/centers/sample-data.ts`.
+
+```python
 class Center(BaseModel):
     id: int
     center: str          # display name
     location: str        # zone / region
     routes: int          # number of active routes operated from this center
     admin: str           # admin / contact name
+    lat: float | None = None   # mirrors Warehouse.lat (damm-backend/models/catalog.py)
+    lng: float | None = None   # depot position used by the route map
 ```
 
-The `Center` model backs the `/` landing screen (centers picker) on the
-frontend. See `wiki/decisions/2026-05-09-centers-model.md` for the proposal.
+See `wiki/decisions/2026-05-09-centers-model.md` for the proposal.
 
-## WebSocket Message Models
+## Route (frontend mock)
+
+The frontend uses a leaner `Route` schema for the centers→routes table.
+It is mock-only and lives entirely in the frontend until/if the backend
+exposes a route endpoint.
+
+Defined in `src/components/routes/columns.tsx`:
+
+| Field         | Type   | Notes                                          |
+|---------------|--------|------------------------------------------------|
+| `id`          | number | Local row id (frontend-only).                  |
+| `code`        | string | Display code.                                  |
+| `driver_name` | string | Driver display name.                           |
+| `truck_code`  | string | Resolves to a truck in `sampleTrucks` (mock).  |
+| `stops`       | number | Stop count.                                    |
+| `date`        | string | ISO `YYYY-MM-DD`.                              |
+| `centerId`    | number | Scopes the route to a `Center`.                |
+
+## Health
 
 ```python
-class WsProgress(BaseModel):
-    type: Literal["progress"] = "progress"
-    job_id: str
-    phase: str
-    pct: int
-    message: str
-    timestamp: datetime
-
-class WsPartialResult(BaseModel):
-    type: Literal["partial"] = "partial"
-    job_id: str
-    route: RouteResult
-    timestamp: datetime
-
-class WsResult(BaseModel):
-    type: Literal["result"] = "result"
-    job_id: str
-    result: OptimizationResult
-    timestamp: datetime
-
-class WsDone(BaseModel):
-    type: Literal["done"] = "done"
-    job_id: str
-    timestamp: datetime
-
-class WsError(BaseModel):
-    type: Literal["error"] = "error"
-    job_id: str
-    code: str
-    message: str
-    timestamp: datetime
-```
-
-Frontend discriminated union:
-
-```ts
-type WsMessage =
-  | { type: "progress"; job_id: string; phase: string; pct: number; message: string; timestamp: string }
-  | { type: "partial"; job_id: string; route: RouteResult; timestamp: string }
-  | { type: "result"; job_id: string; result: OptimizationResult; timestamp: string }
-  | { type: "done"; job_id: string; timestamp: string }
-  | { type: "error"; job_id: string; code: string; message: string; timestamp: string }
+class HealthResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+    data_loaded: bool
+    customer_count: int
+    transport_count: int
+    geocoded_count: int
 ```
 
 ## Evolution Rule
 
-Adding optional fields is allowed.
-
-Renaming fields, changing enum values, changing endpoint paths, or changing WebSocket message `type` values requires a contract proposal in `wiki/decisions/`.
-
+Adding optional fields is allowed. Renaming fields, changing enum values,
+or changing endpoint paths requires a contract proposal in
+`wiki/decisions/`.
