@@ -6,6 +6,7 @@ import { IconCalendar } from "@tabler/icons-react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { useChatSurfaceState } from "@/components/chat/ChatSurfaceProvider";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -14,6 +15,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import type { PlannerChatContext } from "@/lib/chat/types";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -80,6 +82,28 @@ export function AddRouteModal({ open, onOpenChange, centerId }: Props) {
   const [phase, setPhase] = React.useState<Phase>("form");
   const [suggestions, setSuggestions] = React.useState<SuggestedRoute[]>([]);
   const [activeId, setActiveId] = React.useState<string | null>(null);
+
+  const { setContext } = useChatSurfaceState();
+  React.useEffect(() => {
+    if (!open || phase !== "review") return;
+    const active = suggestions.find((s) => s.transport_id === activeId);
+    if (!active) return;
+    const previous: PlannerChatContext = {
+      surface: "add_route_review",
+      centerId,
+      selected: { kind: "suggested_route", transportId: active.transport_id },
+      suggestion: active,
+      siblingSuggestions: suggestions
+        .filter((s) => s.transport_id !== active.transport_id)
+        .map((s) => ({
+          transport_id: s.transport_id,
+          route_code: s.route_code,
+          total_stops: s.total_stops,
+        })),
+    };
+    setContext(previous);
+    return () => setContext(null);
+  }, [open, phase, suggestions, activeId, centerId, setContext]);
 
   const reset = React.useCallback(() => {
     form.reset({ date: today() });

@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 
+import { useChatSurface } from "@/components/chat/ChatSurfaceProvider";
 import { RouteHero } from "@/components/routes/RouteHero";
 import type { Route } from "@/components/routes/columns";
 import { PageLayout } from "@/components/shell/PageLayout";
 import { useBreadcrumb } from "@/components/shell/breadcrumb";
+import type { PlannerChatContext } from "@/lib/chat/types";
 
 type Props = {
   route: Route;
@@ -23,6 +25,17 @@ export function RoutePreviewClient({ route }: Props) {
     ]);
     return () => setCrumbs([]);
   }, [route.code, router, setCrumbs]);
+
+  useChatSurface(
+    useMemo<PlannerChatContext>(
+      () => ({
+        surface: "route_overview",
+        centerId: route.centerId,
+        selected: { kind: "route", routeId: route.id },
+      }),
+      [route.centerId, route.id],
+    ),
+  );
 
   return (
     <PageLayout>

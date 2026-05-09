@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { useChatSurface } from "@/components/chat/ChatSurfaceProvider";
 import { DataTable } from "@/components/shared/DataTable";
 import { RemoteDataState } from "@/components/shared/RemoteDataState";
 import { PageLayout } from "@/components/shell/PageLayout";
@@ -29,6 +30,18 @@ export function TrucksListPage({
     ]);
     return () => setCrumbs([]);
   }, [selected, setCrumbs]);
+
+  useChatSurface(
+    useMemo(
+      () => ({
+        surface: "catalog_table",
+        centerId: null,
+        catalog: "trucks",
+        selected: null,
+      }),
+      [],
+    ),
+  );
 
   return (
     <PageLayout>

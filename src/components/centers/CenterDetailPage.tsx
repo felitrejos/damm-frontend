@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { useChatSurface } from "@/components/chat/ChatSurfaceProvider";
 import { DataTable } from "@/components/shared/DataTable";
 import { PageLayout } from "@/components/shell/PageLayout";
 import { useBreadcrumb } from "@/components/shell/breadcrumb";
@@ -10,6 +11,7 @@ import { AddRouteModal } from "@/components/routes/AddRouteModal";
 import { routeColumns, type Route } from "@/components/routes/columns";
 import { RouteHero } from "@/components/routes/RouteHero";
 import { sampleRoutes } from "@/components/routes/sample-data";
+import type { PlannerChatContext } from "@/lib/chat/types";
 
 import type { Center } from "./columns";
 
@@ -37,6 +39,25 @@ export function CenterDetailPage({ center }: Props) {
     ]);
     return () => setCrumbs([]);
   }, [center, selectedRoute, setCrumbs, router]);
+
+  const chatContext = useMemo<PlannerChatContext>(
+    () =>
+      selectedRoute
+        ? {
+            surface: "route_overview",
+            centerId: center.id,
+            selected: { kind: "route", routeId: selectedRoute.id },
+          }
+        : {
+            surface: "center_routes_table",
+            centerId: center.id,
+            selected: null,
+          },
+    // addRouteOpen forces a fresh reference when the modal closes, so the
+    // chat surface re-publishes after AddRouteModal resets it back to null.
+    [center.id, selectedRoute, addRouteOpen],
+  );
+  useChatSurface(chatContext);
 
   return (
     <PageLayout>

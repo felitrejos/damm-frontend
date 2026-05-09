@@ -1,5 +1,92 @@
 # SmartTruck Wiki Log
 
+## [2026-05-10] frontend | Context-aware planner assistant
+
+Added a read-only "Why?" assistant pinned bottom-right of the app shell.
+The bubble morphs in place into a 420×540 panel — same DOM node,
+transitioning width/height/border-radius — exactly the autOScan-agent
+pattern. Hidden on `/login` (the auth route group does not mount
+`AppShell`).
+
+Architecture:
+
+- Each page calls `useChatSurface(ctx)` to publish a
+  `PlannerChatContext` onto a shared React context. The bubble reads it
+  and ships it on every `sendMessage` body.
+- `POST /api/chat` parses the context, calls
+  `buildVisibleChatContext()`, injects the JSON snapshot into the
+  Gemini system prompt, and streams the response back via `streamText`
+  (`@ai-sdk/google`, `gemini-2.5-flash`, `temperature: 0.3`, no tools).
+- All canonical reads go through `src/lib/chat/data-source.ts` — the
+  single shim mapping mock + backend sources behind a stable
+  `PlannerDataSource` interface. When `/api/v1/data/centers` (proposed
+  in `wiki/decisions/2026-05-09-centers-model.md`) or a future routes
+  endpoint ships, only this file changes.
+
+Surfaces wired (one snapshot shape each, clipped to 40 rows):
+
+- `centers_list` — `/`.
+- `center_routes_table` — `/centers/[id]` with no route selected.
+- `route_overview` — `/centers/[id]` with a route selected, plus
+  `/preview/route/[id]`.
+- `catalog_table` — `/clients`, `/drivers`, `/trucks` (server fetches
+  the same `/api/v1/db/*` endpoints the page already hits, with a
+  graceful fallback to `[]` when the backend is down).
+- `add_route_review` — the active suggestion + sibling summaries are
+  sent in the request body because `generateSuggestedRoutes(date)` is
+  non-deterministic client state.
+
+Agent voice: dispatcher, calm and direct. Refuses optimization, KPI
+comparison, pick lists, and exports as out of scope per
+`wiki/frontend/agent-instructions.md` § Frontend Mission. Refuses any
+action mutation (add, edit, send) because the chat is read-only and
+the UI owns those controls.
+
+Stack note: the autOScan reference repo wraps Groq Llama via
+`@openai/agents` + `@openai/agents-extensions`. Those packages require
+zod 4, but every wiki schema (`domain.ts`, `catalog.ts`, every
+`columns.tsx`) is zod 3. Upgrading would be a contract-touching change
+for no real benefit — we don't use tools, conversation IDs, or any
+agent-runtime feature — so the route handler uses `streamText` from
+the AI SDK directly. Behavior parity with autOScan; less code.
+
+Verified end-to-end against the running dev server:
+
+- Centers list: *"How many centers are there?"* → answers `12`,
+  grounded in `sampleCenters`.
+- Route overview (R-08-A): *"Time window for the second stop?"* →
+  reads from `buildStopsForRoute` synthetic stops, returns the actual
+  pair.
+- Refusal: *"Run optimization on this route now."* → declines, citing
+  app scope.
+- Hallucination guard: *"Cash to collect on stop 50?"* → "I can't see
+  that in this view," not a fabricated number.
+
+Abstraction integrity check passes:
+`grep -rn 'sample-data\|sampleRoutes\|sampleCenters\|buildStopsForRoute\|getCenterDepot' src/agents src/lib/chat src/app/api/chat src/components/chat`
+returns matches only inside `src/lib/chat/data-source.ts`.
+
+Env: requires `GOOGLE_GENERATIVE_AI_API_KEY` in `.env.local`. New
+deps: `@ai-sdk/google`, `@ai-sdk/react`, `ai`, `react-markdown`.
+
+Informed by:
+
+- `wiki/contracts/data-models.md` — `Route`, `Center`,
+  `Customer`/`Driver`/`Truck`, `DeliveryStop` shapes used in the
+  snapshots.
+- `wiki/contracts/api-contract.md` — `/api/v1/db/*` (live) and
+  `/api/v1/data/centers` (proposed) — drove the data-source's per-method
+  source-of-truth table.
+- `wiki/frontend/agent-instructions.md` — Core Pages mapped 1:1 to the
+  five chat surfaces; Frontend Mission scope (no optimization, no KPI
+  comparison, no pick list, no export) drove the agent's refusal rules;
+  UI Rules ("compact panels", "don't hide warnings") shaped the panel
+  sizing and the visible "Seeing X" pill.
+- `wiki/log.md` (2026-05-09 setup entry) — endorsed the read-only
+  single-turn pattern: *"Use OpenAI Agents SDK only for explanations
+  and generated operational summaries."* We swapped the agent runtime
+  for the AI SDK direct path; the architectural shape is identical.
+
 ## [2026-05-09] frontend | README + repo cleanup
 
 Cleaned up onboarding noise after the centers-first flow stabilized.

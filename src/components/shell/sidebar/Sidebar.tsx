@@ -12,6 +12,7 @@ import {
 } from "@tabler/icons-react";
 
 import { AUTH_FLAG_KEY } from "@/components/auth/LoginForm";
+import { clearStoredChat } from "@/components/chat/ChatProvider";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,6 +47,7 @@ export function Sidebar({ open, onClose }: Props) {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem(AUTH_FLAG_KEY);
     }
+    clearStoredChat();
     router.replace("/login");
   };
 
