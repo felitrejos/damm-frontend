@@ -3,9 +3,12 @@ import type { TruckVisualization } from "./types";
 
 // Placeholder data — backend `RouteResult` endpoint not wired here yet.
 // See wiki/contracts/data-models.md and api-contract.md.
+//
+// `center_id` matches sampleCenters in src/components/centers/sample-data.ts.
 export const sampleRoutes: Route[] = [
   {
     id: 1,
+    center_id: 1,
     transport_id: "T-2401",
     route_code: "R-NORTE-1",
     driver_name: "Marta Ruiz",
@@ -17,6 +20,7 @@ export const sampleRoutes: Route[] = [
   },
   {
     id: 2,
+    center_id: 1,
     transport_id: "T-2402",
     route_code: "R-NORTE-2",
     driver_name: "Jordi Vila",
@@ -28,6 +32,7 @@ export const sampleRoutes: Route[] = [
   },
   {
     id: 3,
+    center_id: 2,
     transport_id: "T-2403",
     route_code: "R-LITORAL",
     driver_name: "Núria Soler",
@@ -39,6 +44,7 @@ export const sampleRoutes: Route[] = [
   },
   {
     id: 4,
+    center_id: 2,
     transport_id: "T-2404",
     route_code: "R-VALLES",
     driver_name: "Pere Mas",
@@ -50,6 +56,7 @@ export const sampleRoutes: Route[] = [
   },
   {
     id: 5,
+    center_id: 3,
     transport_id: "T-2405",
     route_code: "R-INTERIOR",
     driver_name: "Ana Pérez",

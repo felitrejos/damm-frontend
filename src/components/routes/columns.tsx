@@ -16,6 +16,7 @@ import { TruckType } from "@/lib/schemas/domain";
 
 export const schema = z.object({
   id: z.number(),
+  center_id: z.number(),
   transport_id: z.string(),
   route_code: z.string(),
   driver_name: z.string(),

@@ -4,7 +4,6 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
   IconBuildingWarehouse,
-  IconRoute,
   IconSteeringWheel,
   IconTruck,
   IconUsers,
@@ -12,7 +11,6 @@ import {
 
 const items = [
   { href: "/", label: "Centers", Icon: IconBuildingWarehouse },
-  { href: "/routes", label: "Routes", Icon: IconRoute },
   { href: "/clients", label: "Clients", Icon: IconUsers },
   { href: "/trucks", label: "Trucks", Icon: IconTruck },
   { href: "/drivers", label: "Drivers", Icon: IconSteeringWheel },
