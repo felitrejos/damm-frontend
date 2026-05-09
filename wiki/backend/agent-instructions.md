@@ -21,6 +21,10 @@ Serve the Damm operational data the frontend needs:
   (`/api/v1/db/customers`, `/api/v1/db/drivers`, `/api/v1/db/trucks`).
 - Expose `/api/v1/data/centers` once the `Center` model is implemented
   (see `wiki/decisions/2026-05-09-centers-model.md`).
+- Expose route endpoints so the frontend can drop the in-component
+  mocks: `GET /api/v1/data/routes?center_id=…` returning `list[Route]`,
+  and `GET /api/v1/data/routes/{route_id}/stops` returning
+  `list[DeliveryStop]`. Schemas in `wiki/contracts/data-models.md`.
 - Geocode customers and centers so `lat`/`lng` are populated.
 - Health endpoint.
 
@@ -43,6 +47,7 @@ contract them through `wiki/decisions/` first.
 4. `/api/v1/db/customers`, `/api/v1/db/drivers`, `/api/v1/db/trucks`.
 5. Geocoding for customers (and centers when added).
 6. `/api/v1/data/centers`.
+7. `/api/v1/data/routes` and `/api/v1/data/routes/{route_id}/stops`.
 
 ## Logging Wiki Changes
 

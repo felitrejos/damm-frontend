@@ -22,6 +22,8 @@ Neither repo should silently change these.
 - Geocoding (so customers/centers can carry `lat`/`lng`).
 - Serving the `/api/v1/db/*` directory endpoints.
 - Serving `/api/v1/data/centers` once implemented.
+- Serving `/api/v1/data/routes` and `/api/v1/data/routes/{route_id}/stops`
+  so the frontend can drop its in-component route + stop mocks.
 - Health endpoint.
 
 The backend does **not** own:

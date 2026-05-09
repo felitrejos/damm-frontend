@@ -108,8 +108,9 @@ class ReturnableItem(BaseModel):
 
 ## Delivery Models
 
-Used by the route map's stop list (currently driven by the
-`route-stops.ts` mock; real data will come from the backend).
+Used by the route map's stop list. Currently driven by the
+`route-stops.ts` mock; the backend will eventually serve this shape via
+`GET /api/v1/data/routes/{route_id}/stops` (see `api-contract.md`).
 
 ```python
 class DeliveryStop(BaseModel):
@@ -138,7 +139,11 @@ class DeliveryStop(BaseModel):
 ## Visualization Models
 
 Used by the truck wireframe scene
-(`src/components/routes/TruckWireframeScene.tsx`).
+(`src/components/routes/TruckWireframeScene.tsx`). **Frontend-owned** —
+the scene is built locally from the route's `truck_code` and the matching
+truck's `capacity_pallets`. The backend is not expected to provide
+`TruckVisualization` payloads (load planning is out of scope); this shape
+exists so the wireframe code has a stable contract to render against.
 
 ```python
 class TruckVisualization(BaseModel):
@@ -225,8 +230,9 @@ See `wiki/decisions/2026-05-09-centers-model.md` for the proposal.
 ## Route (frontend mock)
 
 The frontend uses a leaner `Route` schema for the centers→routes table.
-It is mock-only and lives entirely in the frontend until/if the backend
-exposes a route endpoint.
+The shape is mock-only **today** but is the contract the backend should
+honor when it exposes `GET /api/v1/data/routes?center_id=…` (see
+`wiki/contracts/api-contract.md`).
 
 Defined in `src/components/routes/columns.tsx`:
 
