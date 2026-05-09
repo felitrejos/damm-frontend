@@ -58,6 +58,15 @@ Primary list item:
 TransportSummary
 ```
 
+### List Centers (proposed)
+
+```txt
+GET /api/v1/data/centers
+```
+
+Response: `list[Center]`. Backs the centers picker on the frontend `/` route.
+See `wiki/decisions/2026-05-09-centers-model.md`.
+
 ### Start Full Optimization
 
 ```txt

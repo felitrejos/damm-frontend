@@ -16,11 +16,36 @@ Read in order:
 Build the SmartTruck planner UI:
 
 - Select a transport.
+- Show current route/order data: clients, materials, estimated volume, returnables, and time windows.
+- Let the user choose date, route/transport, truck type, and optimization strategy.
 - Start optimization.
 - Open WebSocket progress.
 - Render partial route as soon as available.
-- Render final route, truck visualization, pick list, KPIs, and explanations.
+- Render final route, stop timeline, truck visualization, pick list, KPIs, baseline comparison, and explanations.
+- Let users inspect each stop.
 - Provide export/pitch views.
+
+## Required Stack
+
+- Next.js App Router.
+- TypeScript.
+- Tailwind CSS.
+- shadcn/ui for tables, dialogs, tabs, buttons, command menu, and form controls.
+- mapcn + MapLibre GL for the route map.
+- TanStack Query for backend fetches and caching.
+- Zod for API response and form validation.
+- Zustand for local planning state.
+- Recharts or Tremor for KPI/comparison charts.
+- Generated OpenAPI TypeScript client when the FastAPI schema is available.
+
+## Core Pages
+
+- `/`: scenario selector and overview.
+- `/planner`: select date, route, transport, truck type, and optimization strategy.
+- `/planner/[planId]`: main demo workspace with map, stop timeline, truck load, KPIs, explanations, and warnings.
+- `/compare/[planId]`: baseline vs SmartTruck comparison.
+- `/data`: data quality view for missing coordinates, missing volumes, and time-window coverage.
+- `/export/[planId]`: driver sheet, warehouse loading sheet, and pitch-ready summary.
 
 ## Contract Rules
 
@@ -36,20 +61,25 @@ Build the SmartTruck planner UI:
 1. App shell.
 2. Zod schemas or generated OpenAPI client.
 3. Transport selector.
-4. Optimize button.
-5. WebSocket job hook.
-6. Progress UI.
-7. Route map.
-8. Truck visualization.
-9. Pick list panel.
-10. KPI panel.
-11. Explanations.
-12. Export views.
+4. Planner setup form: date, route/transport, truck type, strategy.
+5. Optimize button.
+6. WebSocket job hook.
+7. Progress UI.
+8. Route map.
+9. Stop list and timeline.
+10. Truck visualization.
+11. Pick list panel.
+12. KPI and comparison panel.
+13. Explanations.
+14. Data quality view.
+15. Export views.
 
 ## Main UX Flow
 
 ```txt
 Select transport
+  -> show current route/order data
+  -> choose strategy
   -> POST /api/v1/optimize/full
   -> connect WS /ws/jobs/{job_id}
   -> show progress
@@ -72,6 +102,19 @@ Truck:
 - Interpret coordinates in centimeters.
 - Do not ask backend for rendering-specific CSS.
 - The backend gives geometry; frontend owns visuals.
+- Build the truck layout as custom React, not as a map layer.
+- Support 6/8 pallet slots.
+- Show front/rear orientation and left/right side access.
+- Slot cells may show assigned stop range, clients, material categories, returnable risk, heavy/fragile/bulky badges, and unload order.
+- Keep slot dimensions stable across loading, hover, and selected states.
+
+Planner workspace:
+
+- Left panel: stops, filters, warnings, time windows.
+- Center: mapcn map with route and numbered client markers.
+- Right panel: truck layout with side access and color-coded delivery groups.
+- Bottom panel: KPIs, explanation, and baseline comparison.
+- Stop selection must sync across the stop list, map, truck slots, and explanation context.
 
 ## UI Rules
 
@@ -81,6 +124,9 @@ Truck:
 - Keep truck slots dimensionally stable.
 - Make progress and errors obvious.
 - Do not hide warnings.
+- Keep controls feature-complete enough for a live demo.
+- Prefer tabs/drawers over cramped multi-column layouts on mobile.
+- Do not use the map to represent truck loading.
 
 ## Logging Wiki Changes
 
@@ -90,4 +136,3 @@ If you need a contract change:
 2. Add a line to `wiki/log.md`.
 3. Add a decision page in `wiki/decisions/`.
 4. Mention the contract change in your final response or PR notes.
-

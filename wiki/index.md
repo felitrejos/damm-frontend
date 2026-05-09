@@ -13,6 +13,7 @@
 ## Frontend
 
 - [Frontend Agent Instructions](frontend/agent-instructions.md): frontend repo implementation rules.
+- [Frontend Design](frontend/design.md): SmartTruck frontend stack, page map, UX flow, planner workspace, and truck visualization rules.
 
 ## Decisions
 
@@ -21,4 +22,3 @@
 ## Log
 
 - [log.md](log.md): chronological wiki maintenance log.
-

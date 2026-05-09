@@ -294,7 +294,17 @@ class HealthResponse(BaseModel):
     customer_count: int
     transport_count: int
     geocoded_count: int
+
+class Center(BaseModel):
+    id: int
+    center: str          # display name
+    location: str        # zone / region
+    routes: int          # number of active routes operated from this center
+    admin: str           # admin / contact name
 ```
+
+The `Center` model backs the `/` landing screen (centers picker) on the
+frontend. See `wiki/decisions/2026-05-09-centers-model.md` for the proposal.
 
 ## WebSocket Message Models
 
