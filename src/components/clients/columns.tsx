@@ -1,16 +1,75 @@
-import { z } from "zod";
+"use client";
 
-// Mirrors damm-backend CustomerRead (catalog.py): code, name, address, city,
-// postal_code, payment_condition, lat, lng. The `zone` field is a frontend
-// addition for the Add Route picker; see wiki/decisions for the proposal.
-export const clientSchema = z.object({
-  id: z.number(),
-  code: z.string(),
-  name: z.string(),
-  city: z.string(),
-  zone: z.string(), // frontend-only for now; will be backend-derived later
-  lat: z.number().nullable(),
-  lng: z.number().nullable(),
-});
+import type { ColumnDef } from "@tanstack/react-table";
+import type { Customer } from "@/lib/api/catalog";
 
-export type Client = z.infer<typeof clientSchema>;
+// Frontend-only extension of the backend Customer used by the Add Route
+// picker. `zone` will eventually be backend-derived; until then sample data
+// supplies it.
+export type Client = Customer & { zone: string };
+
+export const clientColumns: ColumnDef<Customer>[] = [
+  {
+    accessorKey: "name",
+    header: "Client",
+    size: 300,
+    cell: ({ row }) => (
+      <div>
+        <div className="font-medium">{row.original.name}</div>
+        <div className="text-xs text-muted-foreground">{row.original.code}</div>
+      </div>
+    ),
+  },
+  {
+    accessorKey: "city",
+    header: "City",
+    size: 180,
+    filterFn: (row, columnId, filterValue) => {
+      const values = filterValue as string[] | undefined;
+      if (!values?.length) return true;
+      return values.includes(row.getValue(columnId) as string);
+    },
+    cell: ({ row }) => (
+      <div className="text-muted-foreground">
+        {row.original.city ?? "Unknown"}
+      </div>
+    ),
+  },
+  {
+    accessorKey: "postal_code",
+    header: "Postal code",
+    size: 140,
+    cell: ({ row }) => (
+      <div className="tabular-nums">{row.original.postal_code ?? "-"}</div>
+    ),
+  },
+  {
+    accessorKey: "address",
+    header: "Address",
+    size: 320,
+    cell: ({ row }) => (
+      <div className="max-w-[28rem] truncate text-muted-foreground">
+        {row.original.address ?? "No address"}
+      </div>
+    ),
+  },
+  {
+    id: "geocoded",
+    header: "Geo",
+    size: 120,
+    cell: ({ row }) => {
+      const geocoded = row.original.lat != null && row.original.lng != null;
+      return (
+        <span
+          className={`inline-flex rounded-md px-2 py-1 text-xs font-medium ${
+            geocoded
+              ? "bg-success/15 text-success"
+              : "bg-muted text-muted-foreground"
+          }`}
+        >
+          {geocoded ? "Ready" : "Missing"}
+        </span>
+      );
+    },
+  },
+];

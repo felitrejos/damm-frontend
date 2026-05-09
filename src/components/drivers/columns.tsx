@@ -1,12 +1,25 @@
-import { z } from "zod";
+"use client";
 
-// Drivers — not yet a first-class model in damm-backend. TransportSummary carries
-// `driver_name: str` and TransportDetail carries `driver_id: str`. We're modeling
-// Driver as a first-class entity here; see wiki/decisions for the proposal.
-export const driverSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  phone: z.string().nullable().optional(),
-});
+import type { ColumnDef } from "@tanstack/react-table";
+import type { Driver } from "@/lib/api/catalog";
 
-export type Driver = z.infer<typeof driverSchema>;
+export type { Driver };
+
+export const driverColumns: ColumnDef<Driver>[] = [
+  {
+    accessorKey: "name",
+    header: "Driver",
+    size: 300,
+    cell: ({ row }) => <div className="font-medium">{row.original.name}</div>,
+  },
+  {
+    accessorKey: "code",
+    header: "Code",
+    size: 180,
+    cell: ({ row }) => (
+      <div className="tabular-nums text-muted-foreground">
+        {row.original.code}
+      </div>
+    ),
+  },
+];
