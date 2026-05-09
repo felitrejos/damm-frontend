@@ -6,7 +6,6 @@ import {
   Line,
   OrbitControls,
   PerspectiveCamera,
-  Text,
 } from "@react-three/drei";
 import { useMemo, useRef } from "react";
 import type { Group } from "three";
@@ -245,19 +244,6 @@ function ForwardArrow({ dimensions }: DimensionsProps) {
         transparent
         opacity={0.85}
       />
-      <Text
-        position={toScenePosition(
-          { x: tipX + 36, y: centerY, z: 2 },
-          dimensions
-        )}
-        rotation={[-Math.PI / 2, 0, -Math.PI / 2]}
-        fontSize={0.14}
-        color={COLOR_FORWARD}
-        anchorX="left"
-        anchorY="middle"
-      >
-        FRONT
-      </Text>
     </group>
   );
 }
@@ -468,16 +454,6 @@ function PalletWireframe({ pallet, truckDimensions }: PalletWireframeProps) {
             />
           )}
 
-          <Text
-            position={[0, stackHeightUnit / 2 + 0.05, 0]}
-            rotation={[-Math.PI / 2, 0, 0]}
-            fontSize={0.13}
-            color="#f9fdff"
-            anchorX="center"
-            anchorY="middle"
-          >
-            {pallet.label}
-          </Text>
         </group>
       )}
     </group>
