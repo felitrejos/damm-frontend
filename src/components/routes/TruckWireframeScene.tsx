@@ -3,6 +3,8 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   Edges,
+  Instance,
+  Instances,
   Line,
   OrbitControls,
   PerspectiveCamera,
@@ -33,16 +35,20 @@ const SCENE = {
   // Gap between cabin back wall and cargo box front wall.
   cabinCargoGapCm: 18,
 
-  // Lateral overhang of the wheels past the cargo body sides.
-  wheelOutwardCm: 14,
+  // Lateral overhang of the wheels past the cargo body sides. Big enough that
+  // a 50-cm-radius tire with thick sidewall doesn't poke into the cargo box.
+  wheelOutwardCm: 22,
 
   // Front axle X position (in truck coords, negative because it's under the cabin).
   truckFrontAxleCm: -95,
   vanFrontAxleCm: -55,
 
-  // Rear axle proportions (fraction of cargo length from front of cargo box).
-  truckRearAxleAt: 0.62,
-  truckTandemAxleAt: 0.78,
+  // Tandem rear axles use ABSOLUTE 145 cm spacing (real Damm rigid lorries) so the
+  // two rear wheels never overlap regardless of cargo length.
+  truckTandemSpacingCm: 145,
+  // Last (rearmost) axle position as a fraction of cargo length, measured from
+  // the front of the cargo box.
+  truckTandemRearAt: 0.84,
   vanRearAxleAt: 0.78,
 
   // Trucks below this length use the "van" wheel layout (single rear axle, smaller tires).
@@ -51,6 +57,17 @@ const SCENE = {
   // Wheel sizes per layout. Real Damm 6/8-pal trucks run ~22.5" tires (~52 cm radius).
   truckWheelRadiusCm: 50,
   vanWheelRadiusCm: 36,
+};
+
+// Cargo unit footprints, aligned with backend ProductDimensions defaults.
+// Used to build the per-item visualization inside each pallet.
+//   1 bottle case = 1 unit footprint (40×30 cm).
+//   1 can case    ≈ 0.8 unit          (33×24 cm).
+//   1 barrel      ≈ 4 units (cylinder, 60 cm Ø × 60 cm tall).
+const ITEM = {
+  caseBottle: { length_cm: 40, width_cm: 30, height_cm: 25 },
+  caseCan: { length_cm: 33, width_cm: 24, height_cm: 25 },
+  barrel: { radius_cm: 30, height_cm: 60 },
 };
 
 const COLOR = {
@@ -80,8 +97,6 @@ const COLOR = {
 
   rearDoor: "#ff6b9a",
   rearDoorOpacity: 0.6,
-
-  forward: "#9ef01a",
 
   gridPrimary: "#78e7ff",
   gridSecondary: "#1f3742",
@@ -240,7 +255,6 @@ function Stage({
         <CargoRibs dimensions={visualization.truck_dims} />
         <CornerPillars dimensions={visualization.truck_dims} />
         <RearDoor dimensions={visualization.truck_dims} />
-        <ForwardArrow dimensions={visualization.truck_dims} />
         <Cabin dimensions={visualization.truck_dims} />
         <Pallets
           pallets={visualization.pallets}
@@ -563,48 +577,6 @@ function RearDoor({ dimensions }: DimensionsProps) {
 }
 
 // =============================================================================
-// Forward arrow — filled triangle on the deck pointing toward the cabin.
-// =============================================================================
-
-function ForwardArrow({ dimensions }: DimensionsProps) {
-  const centerY = dimensions.width_cm / 2;
-  const tipXcm = dimensions.length_cm * 0.18;
-  const tailXcm = dimensions.length_cm * 0.04;
-  const wingCm = Math.min(34, dimensions.width_cm * 0.18);
-  const z = 2;
-
-  const tip = toScenePos({ x: tipXcm, y: centerY, z }, dimensions);
-  const wingL = toScenePos(
-    { x: tailXcm, y: centerY - wingCm, z },
-    dimensions,
-  );
-  const wingR = toScenePos(
-    { x: tailXcm, y: centerY + wingCm, z },
-    dimensions,
-  );
-  const tail = toScenePos({ x: tailXcm, y: centerY, z }, dimensions);
-
-  return (
-    <group>
-      <Line
-        points={[wingL, tip, wingR, wingL]}
-        color={COLOR.forward}
-        lineWidth={1.5}
-        transparent
-        opacity={0.9}
-      />
-      <Line
-        points={[tail, tip]}
-        color={COLOR.forward}
-        lineWidth={0.9}
-        transparent
-        opacity={0.7}
-      />
-    </group>
-  );
-}
-
-// =============================================================================
 // Cabin — body + windshield + side windows + bumper + headlights + mirrors + grille.
 // =============================================================================
 
@@ -789,6 +761,131 @@ interface PalletProps {
   onHover?: (id: string | null) => void;
 }
 
+type ItemKind = "case-bottle" | "case-can" | "barrel" | null;
+
+function detectItemKind(pallet: VizPallet): ItemKind {
+  if (pallet.is_return) return null;
+  const s = pallet.products_summary.join(" ").toLowerCase();
+  if (/barrel|barril|gas/.test(s)) return "barrel";
+  if (/can|lat[ae]|soft\s*drink/.test(s)) return "case-can";
+  return "case-bottle";
+}
+
+// Pack same-size items into rows × columns × layers inside the pallet stack
+// volume. Returns each item's center position in pallet-local cm coords.
+function packGrid(
+  pallet: VizPallet,
+  cellL: number,
+  cellW: number,
+  cellH: number,
+): Array<[number, number, number]> {
+  const stackH = Math.max(
+    0,
+    safe(pallet.dims.height_cm, 0) - SCENE.palletBaseHeightCm,
+  );
+  const layers = Math.max(0, Math.floor(stackH / cellH));
+  const colsX = Math.max(1, Math.floor(safe(pallet.dims.length_cm, 1) / cellL));
+  const colsY = Math.max(1, Math.floor(safe(pallet.dims.width_cm, 1) / cellW));
+  const padX = (pallet.dims.length_cm - colsX * cellL) / 2;
+  const padY = (pallet.dims.width_cm - colsY * cellW) / 2;
+  const positions: Array<[number, number, number]> = [];
+  for (let layer = 0; layer < layers; layer++) {
+    for (let cy = 0; cy < colsY; cy++) {
+      for (let cx = 0; cx < colsX; cx++) {
+        positions.push([
+          padX + cx * cellL + cellL / 2,
+          padY + cy * cellW + cellW / 2,
+          SCENE.palletBaseHeightCm + layer * cellH + cellH / 2,
+        ]);
+      }
+    }
+  }
+  return positions;
+}
+
+interface PalletItemsProps {
+  pallet: VizPallet;
+  truck: DimensionsCm;
+}
+
+function PalletItems({ pallet, truck }: PalletItemsProps) {
+  const kind = useMemo(() => detectItemKind(pallet), [pallet]);
+
+  // Compute item positions once per pallet/kind.
+  const positions = useMemo(() => {
+    if (kind === "barrel") {
+      const cell = ITEM.barrel.radius_cm * 2;
+      return packGrid(pallet, cell, cell, ITEM.barrel.height_cm);
+    }
+    if (kind === "case-can") {
+      return packGrid(
+        pallet,
+        ITEM.caseCan.length_cm,
+        ITEM.caseCan.width_cm,
+        ITEM.caseCan.height_cm,
+      );
+    }
+    if (kind === "case-bottle") {
+      return packGrid(
+        pallet,
+        ITEM.caseBottle.length_cm,
+        ITEM.caseBottle.width_cm,
+        ITEM.caseBottle.height_cm,
+      );
+    }
+    return [];
+  }, [pallet, kind]);
+
+  if (kind === null || positions.length === 0) return null;
+
+  const scenePositions = positions.map(([px, py, pz]) =>
+    toScenePos(
+      {
+        x: pallet.position.x + px,
+        y: pallet.position.y + py,
+        z: pallet.position.z + pz,
+      },
+      truck,
+    ),
+  );
+
+  if (kind === "barrel") {
+    return (
+      <Instances limit={positions.length}>
+        <cylinderGeometry
+          args={[
+            ITEM.barrel.radius_cm * CM_TO_SCENE,
+            ITEM.barrel.radius_cm * CM_TO_SCENE,
+            ITEM.barrel.height_cm * CM_TO_SCENE,
+            18,
+          ]}
+        />
+        <meshBasicMaterial color={pallet.color} />
+        {scenePositions.map((pos, i) => (
+          <Instance key={i} position={pos} />
+        ))}
+      </Instances>
+    );
+  }
+
+  const dim = kind === "case-can" ? ITEM.caseCan : ITEM.caseBottle;
+  return (
+    <Instances limit={positions.length}>
+      <boxGeometry
+        args={[
+          dim.length_cm * CM_TO_SCENE,
+          dim.height_cm * CM_TO_SCENE,
+          dim.width_cm * CM_TO_SCENE,
+        ]}
+      />
+      <meshBasicMaterial color={pallet.color} />
+      {scenePositions.map((pos, i) => (
+        <Instance key={i} position={pos} />
+      ))}
+    </Instances>
+  );
+}
+
 function Pallet({ pallet, truck, isHovered, onHover }: PalletProps) {
   const totalHeight = safe(pallet.dims.height_cm, 1);
   const baseHeight = Math.min(SCENE.palletBaseHeightCm, totalHeight);
@@ -827,6 +924,9 @@ function Pallet({ pallet, truck, isHovered, onHover }: PalletProps) {
 
   const isReturn = pallet.is_return;
 
+  // Returnables get a wireframe-only render with a dashed hatching pattern on
+  // the top face to signal "empty containers". No transparent fill anywhere on
+  // the stack — that was the source of the angle-dependent face flicker.
   const hatchLines = useMemo(() => {
     if (!isReturn || stackHeight <= 0) return [];
     const linesCount = 4;
@@ -848,16 +948,6 @@ function Pallet({ pallet, truck, isHovered, onHover }: PalletProps) {
     });
   }, [isReturn, stackHeight, stackHeightUnit, stackLength, stackWidth]);
 
-  // Hover-driven look. depthWrite=false on the transparent fills avoids the
-  // alpha-sort flicker between overlapping pallets (a pallet behind another
-  // would otherwise sometimes "pop" to the front).
-  const fillOpacity = isReturn
-    ? isHovered
-      ? 0.18
-      : 0.05
-    : isHovered
-      ? 0.32
-      : 0.10;
   const edgeWidth = isHovered ? 2.0 : 1.3;
 
   return (
@@ -871,6 +961,7 @@ function Pallet({ pallet, truck, isHovered, onHover }: PalletProps) {
         onHover?.(null);
       }}
     >
+      {/* Pallet base (wood/plastic platform). */}
       <group position={baseCenter}>
         <mesh>
           <boxGeometry args={[baseLength, baseHeightUnit, baseWidth]} />
@@ -884,16 +975,20 @@ function Pallet({ pallet, truck, isHovered, onHover }: PalletProps) {
         </mesh>
       </group>
 
+      {/* Real cargo items: cases (boxes) for bottles/cans, cylinders for barrels.
+          Solid materials and instanced rendering — no transparency, so the look
+          is identical from any camera angle. */}
+      {!isReturn && stackHeight > 0 && (
+        <PalletItems pallet={pallet} truck={truck} />
+      )}
+
+      {/* Outer wireframe of the pallet stack — edges only, fully transparent fill
+          (depthWrite=false) so it never causes alpha-sort flicker. */}
       {stackHeight > 0 && (
         <group position={stackCenter}>
           <mesh>
             <boxGeometry args={[stackLength, stackHeightUnit, stackWidth]} />
-            <meshBasicMaterial
-              transparent
-              opacity={fillOpacity}
-              color={pallet.color}
-              depthWrite={false}
-            />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
             <Edges color={pallet.color} linewidth={edgeWidth} />
           </mesh>
 
@@ -904,7 +999,7 @@ function Pallet({ pallet, truck, isHovered, onHover }: PalletProps) {
               color={pallet.color}
               lineWidth={0.5}
               transparent
-              opacity={0.6}
+              opacity={isHovered ? 0.85 : 0.6}
               dashed
               dashSize={0.05}
               gapSize={0.04}
@@ -926,13 +1021,19 @@ function WheelSet({ dimensions }: DimensionsProps) {
     ? SCENE.vanWheelRadiusCm
     : SCENE.truckWheelRadiusCm;
 
-  const axleXs = isVan
-    ? [SCENE.vanFrontAxleCm, dimensions.length_cm * SCENE.vanRearAxleAt]
-    : [
-        SCENE.truckFrontAxleCm,
-        dimensions.length_cm * SCENE.truckRearAxleAt,
-        dimensions.length_cm * SCENE.truckTandemAxleAt,
-      ];
+  let axleXs: number[];
+  if (isVan) {
+    axleXs = [
+      SCENE.vanFrontAxleCm,
+      dimensions.length_cm * SCENE.vanRearAxleAt,
+    ];
+  } else {
+    // Use absolute spacing for the tandem so the two rear wheels never overlap
+    // (with proportional ratios they touched on shorter trucks).
+    const tandemRearX = dimensions.length_cm * SCENE.truckTandemRearAt;
+    const tandemFrontX = tandemRearX - SCENE.truckTandemSpacingCm;
+    axleXs = [SCENE.truckFrontAxleCm, tandemFrontX, tandemRearX];
+  }
 
   const sideY = [
     -SCENE.wheelOutwardCm,
@@ -960,9 +1061,10 @@ interface WheelProps {
 }
 
 function Wheel({ position, radius }: WheelProps) {
-  const tubeRadius = radius * 0.30;
-  const hubRadius = radius * 0.42;
-  const hubDepth = tubeRadius * 1.5;
+  // Thicker rubber tire + deeper hub for a more substantial, less ring-like look.
+  const tubeRadius = radius * 0.36;
+  const hubRadius = radius * 0.44;
+  const hubDepth = tubeRadius * 1.85;
   const capRadius = hubRadius * 0.32;
 
   return (
