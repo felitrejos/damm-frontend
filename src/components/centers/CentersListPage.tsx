@@ -1,24 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { DataTable } from "@/components/shared/DataTable";
 import { PageLayout } from "@/components/shell/PageLayout";
 import { useBreadcrumb } from "@/components/shell/breadcrumb";
-import { centerColumns, type Center } from "./columns";
+import { AddCenterModal } from "./AddCenterModal";
+import { centerColumns } from "./columns";
 import { sampleCenters } from "./sample-data";
 
 export function CentersListPage() {
-  const [selected, setSelected] = useState<Center | null>(null);
+  const router = useRouter();
   const { setCrumbs } = useBreadcrumb();
 
+  const [addOpen, setAddOpen] = useState(false);
+
   useEffect(() => {
-    setCrumbs([
-      { label: "Centers", onClick: () => setSelected(null) },
-      ...(selected ? [{ label: selected.center }] : []),
-    ]);
+    setCrumbs([{ label: "Centers" }]);
     return () => setCrumbs([]);
-  }, [selected, setCrumbs]);
+  }, [setCrumbs]);
 
   return (
     <PageLayout>
@@ -41,12 +42,12 @@ export function CentersListPage() {
           filterLabel="Filter by location"
           filterMobileLabel="Location"
           addButtonLabel="Add Center"
-          selectedRowId={selected?.id.toString() ?? null}
-          onRowClick={(c) =>
-            setSelected((curr) => (curr?.id === c.id ? null : c))
-          }
+          onAdd={() => setAddOpen(true)}
+          onRowClick={(c) => router.push(`/centers/${c.id}`)}
         />
       </div>
+
+      <AddCenterModal open={addOpen} onOpenChange={setAddOpen} />
     </PageLayout>
   );
 }
