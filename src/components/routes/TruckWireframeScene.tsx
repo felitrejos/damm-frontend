@@ -24,9 +24,8 @@ const CM_TO_SCENE = 0.018;
 
 const SCENE = {
   // Vertical lift between the ground and the underside of the cargo deck.
-  // ~110 cm matches a real rigid lorry chassis (wheel top + frame + suspension).
-  // Leaves enough room between wheel top and the deck for the chassis beams.
-  chassisHeightCm: 110,
+  // ~125 cm leaves room for ~50 cm wheels (top at 100 cm) plus chassis frame.
+  chassisHeightCm: 125,
 
   // Pallet's wooden base height (the platform under the product stack).
   palletBaseHeightCm: 15,
@@ -35,10 +34,10 @@ const SCENE = {
   cabinCargoGapCm: 18,
 
   // Lateral overhang of the wheels past the cargo body sides.
-  wheelOutwardCm: 12,
+  wheelOutwardCm: 14,
 
   // Front axle X position (in truck coords, negative because it's under the cabin).
-  truckFrontAxleCm: -90,
+  truckFrontAxleCm: -95,
   vanFrontAxleCm: -55,
 
   // Rear axle proportions (fraction of cargo length from front of cargo box).
@@ -49,9 +48,9 @@ const SCENE = {
   // Trucks below this length use the "van" wheel layout (single rear axle, smaller tires).
   vanLengthThresholdCm: 450,
 
-  // Wheel sizes per layout.
-  truckWheelRadiusCm: 40,
-  vanWheelRadiusCm: 30,
+  // Wheel sizes per layout. Real Damm 6/8-pal trucks run ~22.5" tires (~52 cm radius).
+  truckWheelRadiusCm: 50,
+  vanWheelRadiusCm: 36,
 };
 
 const COLOR = {
@@ -62,18 +61,16 @@ const COLOR = {
   cargoFill: "#9adfff",
   cargoFillOpacity: 0.025,
 
-  cargoDeck: "#0e1722",
-  cargoDeckOpacity: 0.55,
+  cargoDeck: "#0a121b",
+  cargoDeckOpacity: 0.32,
 
   cargoPillar: "#bfe9ff",
-  cargoPillarOpacity: 0.55,
 
   cabinEdge: "#dff8ff",
   cabinFill: "#ffffff",
   cabinFillOpacity: 0.04,
 
-  windshield: "#78e7ff",
-  windshieldOpacity: 0.20,
+  windshieldLine: "#78e7ff",
 
   chassis: "#1f2a37",
   chassisEdge: "#94a3b8",
@@ -170,7 +167,7 @@ export function TruckWireframeScene({
         maxDistance={22}
         minPolarAngle={Math.PI * 0.18}
         maxPolarAngle={Math.PI * 0.5}
-        target={[0.2, 1.7, 0]}
+        target={[0.2, 2.0, 0]}
       />
     </Canvas>
   );
@@ -454,7 +451,7 @@ function CargoRibs({ dimensions }: DimensionsProps) {
 // =============================================================================
 
 function CornerPillars({ dimensions }: DimensionsProps) {
-  const pillarThicknessCm = 7;
+  const pillarThicknessCm = 6;
   const corners: Array<[number, number]> = [
     [0, 0],
     [0, dimensions.width_cm],
@@ -479,12 +476,8 @@ function CornerPillars({ dimensions }: DimensionsProps) {
               pillarThicknessCm * CM_TO_SCENE,
             ]}
           />
-          <meshBasicMaterial
-            color={COLOR.cargoPillar}
-            transparent
-            opacity={COLOR.cargoPillarOpacity}
-          />
-          <Edges color={COLOR.cargoEdge} linewidth={0.7} />
+          <meshBasicMaterial color={COLOR.cargoPillar} />
+          <Edges color={COLOR.cargoEdge} linewidth={0.6} />
         </mesh>
       ))}
     </group>
@@ -611,6 +604,16 @@ function Cabin({ dimensions }: DimensionsProps) {
   const height = cabinHeightCm * CM_TO_SCENE;
   const width = cabinWidthCm * CM_TO_SCENE;
 
+  // Windshield outline: traces the inclined glass on the cabin top-front edge.
+  //   Cabin local axes: X = length (front is -X), Y = height (up), Z = width.
+  //   Top-front edge of cabin: x = -length/2, y = +height/2, z varies along width.
+  //   Windshield base bends down/forward to x = -length*0.30, y = +height*0.10.
+  const wsTopX = -length * 0.5;
+  const wsTopY = height * 0.5;
+  const wsBottomX = -length * 0.32;
+  const wsBottomY = height * 0.12;
+  const wsZ = width * 0.49;
+
   return (
     <group position={center}>
       {/* Main body box */}
@@ -624,36 +627,56 @@ function Cabin({ dimensions }: DimensionsProps) {
         <Edges color={COLOR.cabinEdge} linewidth={1.1} />
       </mesh>
 
-      {/* Windshield — tinted plane on the upper-front face, rotated about Z so it tilts back */}
-      <mesh
-        position={[-length * 0.32, height * 0.15, 0]}
-        rotation={[0, 0, -0.55]}
-      >
-        <planeGeometry args={[length * 0.55, width * 0.94]} />
-        <meshBasicMaterial
-          color={COLOR.windshield}
-          transparent
-          opacity={COLOR.windshieldOpacity}
-          side={DoubleSide}
-        />
-      </mesh>
-
-      {/* Side windows */}
+      {/* Windshield outline — frame around the inclined glass, drawn as lines on
+          each side wall of the cabin and connected across the top. */}
       {[-1, 1].map((side) => (
-        <mesh
-          key={`window-${side}`}
-          position={[length * 0.05, height * 0.18, side * width * 0.501]}
-          rotation={[0, side * Math.PI * 0.5, 0]}
-        >
-          <planeGeometry args={[length * 0.45, height * 0.32]} />
-          <meshBasicMaterial
-            color={COLOR.windshield}
-            transparent
-            opacity={COLOR.windshieldOpacity * 0.8}
-            side={DoubleSide}
-          />
-        </mesh>
+        <Line
+          key={`wsframe-${side}`}
+          points={[
+            [wsBottomX, wsBottomY, side * wsZ],
+            [wsTopX, wsTopY, side * wsZ],
+          ]}
+          color={COLOR.windshieldLine}
+          lineWidth={1.0}
+          transparent
+          opacity={0.75}
+        />
       ))}
+      <Line
+        points={[
+          [wsBottomX, wsBottomY, -wsZ],
+          [wsBottomX, wsBottomY, wsZ],
+        ]}
+        color={COLOR.windshieldLine}
+        lineWidth={1.0}
+        transparent
+        opacity={0.75}
+      />
+
+      {/* Side window outlines — rectangles drawn on each lateral cabin face */}
+      {[-1, 1].map((side) => {
+        const z = side * width * 0.5005;
+        const x0 = -length * 0.25;
+        const x1 = length * 0.40;
+        const y0 = -height * 0.04;
+        const y1 = height * 0.36;
+        return (
+          <Line
+            key={`window-${side}`}
+            points={[
+              [x0, y0, z],
+              [x1, y0, z],
+              [x1, y1, z],
+              [x0, y1, z],
+              [x0, y0, z],
+            ]}
+            color={COLOR.windshieldLine}
+            lineWidth={0.8}
+            transparent
+            opacity={0.55}
+          />
+        );
+      })}
 
       {/* Front grille — short horizontal lines below the windshield */}
       {[-0.18, -0.27, -0.36].map((yRatio) => (
