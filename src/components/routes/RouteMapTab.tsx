@@ -290,7 +290,7 @@ export function RouteMapTab({ route, stops, depot }: RouteMapTabProps) {
       </div>
 
       <ol
-        className="flex min-h-0 flex-col gap-1.5 overflow-y-auto rounded-md border border-border bg-surface-2 p-2"
+        className="flex min-h-0 flex-col gap-1.5 overflow-y-auto rounded-md border border-border bg-surface-2 p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         aria-label="Stop list"
       >
         {stops.map((stop, idx) => (
