@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { AUTH_FLAG_KEY } from "@/components/auth/LoginForm";
@@ -10,30 +10,21 @@ import { Sidebar } from "./sidebar/Sidebar";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const pathname = usePathname();
   const router = useRouter();
   const [authResolved, setAuthResolved] = useState(false);
 
-  const isLoginRoute = pathname?.startsWith("/login") ?? false;
-
-  // Mock auth gate. Real session/SSO will replace this once a backend
-  // contract for `/auth/*` exists in the wiki.
+  // Mock auth gate. The (auth) route group has its own layout, so AppShell
+  // only mounts inside (app) — anyone here without the flag goes to /login.
+  // Real session/SSO will replace this once the backend `/auth/*` contract
+  // exists in the wiki.
   useEffect(() => {
-    if (isLoginRoute) {
-      setAuthResolved(true);
-      return;
-    }
     const flag = window.localStorage.getItem(AUTH_FLAG_KEY);
     if (flag !== "1") {
       router.replace("/login");
       return;
     }
     setAuthResolved(true);
-  }, [isLoginRoute, router]);
-
-  if (isLoginRoute) {
-    return <>{children}</>;
-  }
+  }, [router]);
 
   if (!authResolved) {
     return <div className="h-screen bg-canvas" aria-hidden />;
