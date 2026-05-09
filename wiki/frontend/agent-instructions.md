@@ -13,116 +13,91 @@ Read in order:
 
 ## Frontend Mission
 
-Build the SmartTruck planner UI:
+Operations console for Damm logistics. The current scope is:
 
-- Select a transport.
-- Show current route/order data: clients, materials, estimated volume, returnables, and time windows.
-- Let the user choose date, route/transport, truck type, and optimization strategy.
-- Start optimization.
-- Open WebSocket progress.
-- Render partial route as soon as available.
-- Render final route, stop timeline, truck visualization, pick list, KPIs, baseline comparison, and explanations.
-- Let users inspect each stop.
-- Provide export/pitch views.
+- Browse distribution centers and the routes operated from each.
+- Inspect a route via the **RouteHero**: a 3D truck wireframe (Camión tab)
+  and a depot/stops map with a simulation control bar (Mapa tab).
+- Browse customer, driver, and truck directories backed by the backend
+  database endpoints.
+- Create new routes locally via the AddRouteModal.
+
+Optimization, KPI/comparison, pick list, and export surfaces are **not in
+scope** for this frontend. Remaining work is wiring frontend ↔ backend for
+the live data endpoints already used.
 
 ## Required Stack
 
-- Next.js App Router.
-- TypeScript.
-- Tailwind CSS.
-- shadcn/ui for tables, dialogs, tabs, buttons, command menu, and form controls.
-- mapcn + MapLibre GL for the route map.
-- TanStack Query for backend fetches and caching.
+Cross-check against root `package.json` before assuming anything is present.
+
+- Next.js 15 App Router (Turbopack dev).
+- React 19 + TypeScript.
+- Tailwind CSS v4.
+- shadcn/ui (built on `@base-ui/react`) for tables, dialogs, tabs, buttons, dropdowns, and form controls.
+- `@tanstack/react-table` for directory and route tables.
+- `react-hook-form` + `@hookform/resolvers` for forms (e.g. `AddRouteModal`).
+- MapLibre GL (`maplibre-gl`) for the route map.
+- `three` + `@react-three/fiber` + `@react-three/drei` for the truck wireframe scene.
 - Zod for API response and form validation.
-- Zustand for local planning state.
-- Recharts or Tremor for KPI/comparison charts.
-- Generated OpenAPI TypeScript client when the FastAPI schema is available.
+- `motion` for component-level animation.
+- `@tabler/icons-react` and `lucide-react` for icons.
+- `date-fns` + `react-day-picker` for date controls.
 
 ## Core Pages
 
-- `/`: scenario selector and overview.
-- `/planner`: select date, route, transport, truck type, and optimization strategy.
-- `/planner/[planId]`: main demo workspace with map, stop timeline, truck load, KPIs, explanations, and warnings.
-- `/compare/[planId]`: baseline vs SmartTruck comparison.
-- `/data`: data quality view for missing coordinates, missing volumes, and time-window coverage.
-- `/export/[planId]`: driver sheet, warehouse loading sheet, and pitch-ready summary.
+Actual app router layout (`src/app/`):
+
+- `/(auth)/login` — fake login form. Demo entry; no real auth.
+- `/(app)/` — **centers picker**: data table of distribution centers (sortable, filterable). Landing screen.
+- `/(app)/centers/[id]` — center detail. Routes `DataTable` for the center plus the **RouteHero** (Camión / Mapa tabs) when a route is selected. Hosts the `AddRouteModal`.
+- `/(app)/clients` — customers directory, server-rendered from `GET /api/v1/db/customers?limit=10000`.
+- `/(app)/drivers` — drivers directory, server-rendered from `GET /api/v1/db/drivers?limit=10000`.
+- `/(app)/trucks` — trucks directory, server-rendered from `GET /api/v1/db/trucks?limit=10000`.
+- `/(app)/preview/route/[id]` — dev-only direct entry to RouteHero. Remove once routes have real URLs.
 
 ## Contract Rules
 
 - Use the contract models exactly at the API boundary.
 - Do not invent backend fields.
-- If using mock data, it must validate against the shared schemas.
-- Accept snake_case fields from backend unless a generated client maps them.
-- Recognize exact WebSocket message types: `progress`, `partial`, `result`, `done`, `error`.
-- Recognize exact progress phase keys from `api-contract.md`.
-
-## Implementation Order
-
-1. App shell.
-2. Zod schemas or generated OpenAPI client.
-3. Transport selector.
-4. Planner setup form: date, route/transport, truck type, strategy.
-5. Optimize button.
-6. WebSocket job hook.
-7. Progress UI.
-8. Route map.
-9. Stop list and timeline.
-10. Truck visualization.
-11. Pick list panel.
-12. KPI and comparison panel.
-13. Explanations.
-14. Data quality view.
-15. Export views.
+- If using mock data, it must validate against the shared schemas in `src/lib/schemas/domain.ts`.
+- Accept snake_case fields from backend.
 
 ## Main UX Flow
 
 ```txt
-Select transport
-  -> show current route/order data
-  -> choose strategy
-  -> POST /api/v1/optimize/full
-  -> connect WS /ws/jobs/{job_id}
-  -> show progress
-  -> render WsPartialResult route
-  -> render WsResult route/load/viz/pick list
-  -> close on WsDone
+/(auth)/login  (fake)
+  -> /  (centers picker)
+  -> click center
+  -> /centers/[id]  (routes table + RouteHero on selection)
+  -> click route
+  -> RouteHero { Camión | Mapa } tabs
 ```
 
 ## Visualization Rules
 
-Map:
+Map (RouteMapTab):
 
-- Use mapcn + MapLibre.
+- MapLibre GL.
 - Show depot, numbered stops, route line, selected stop state.
-- Render `route_geojson` if available.
 
-Truck:
+Truck (TruckWireframeScene):
 
-- Use `TruckVisualization`.
+- Use the `TruckVisualization` shape from `wiki/contracts/data-models.md`.
 - Interpret coordinates in centimeters.
-- Do not ask backend for rendering-specific CSS.
 - The backend gives geometry; frontend owns visuals.
-- Build the truck layout as custom React, not as a map layer.
-- Support 6/8 pallet slots.
+- Build the truck layout as custom React + R3F, not as a map layer.
+- Support 6/8 pallet slots and the van layout (3 slots).
 - Show front/rear orientation and left/right side access.
 - Slot cells may show assigned stop range, clients, material categories, returnable risk, heavy/fragile/bulky badges, and unload order.
 - Keep slot dimensions stable across loading, hover, and selected states.
 
-Planner workspace:
-
-- Left panel: stops, filters, warnings, time windows.
-- Center: mapcn map with route and numbered client markers.
-- Right panel: truck layout with side access and color-coded delivery groups.
-- Bottom panel: KPIs, explanation, and baseline comparison.
-- Stop selection must sync across the stop list, map, truck slots, and explanation context.
-
 ## UI Rules
 
 - This is an operations app, not a marketing site.
-- First screen should help the user start planning.
+- First screen should help the user start work.
 - Use compact, readable panels.
 - Keep truck slots dimensionally stable.
-- Make progress and errors obvious.
+- Make errors obvious.
 - Do not hide warnings.
 - Keep controls feature-complete enough for a live demo.
 - Prefer tabs/drawers over cramped multi-column layouts on mobile.

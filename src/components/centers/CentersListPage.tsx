@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { useChatSurface } from "@/components/chat/ChatSurfaceProvider";
 import { DataTable } from "@/components/shared/DataTable";
 import { PageLayout } from "@/components/shell/PageLayout";
 import { useBreadcrumb } from "@/components/shell/breadcrumb";
@@ -20,6 +21,13 @@ export function CentersListPage() {
     setCrumbs([{ label: "Centers" }]);
     return () => setCrumbs([]);
   }, [setCrumbs]);
+
+  useChatSurface(
+    useMemo(
+      () => ({ surface: "centers_list", centerId: null, selected: null }),
+      [],
+    ),
+  );
 
   return (
     <PageLayout>

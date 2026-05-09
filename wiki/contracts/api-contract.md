@@ -1,6 +1,24 @@
 # API Contract
 
-This page is the shared frontend/backend communication contract.
+Frontend ↔ backend endpoints used by the app, plus the proposed endpoints
+the backend still needs to expose so the frontend can drop its placeholder
+mocks.
+
+## Data Source Status
+
+| Surface                      | Today                       | Backend will provide                           |
+|------------------------------|-----------------------------|------------------------------------------------|
+| `/clients`                   | `GET /api/v1/db/customers`  | ✅ live                                        |
+| `/drivers`                   | `GET /api/v1/db/drivers`    | ✅ live                                        |
+| `/trucks`                    | `GET /api/v1/db/trucks`     | ✅ live                                        |
+| `/` (centers picker)         | `sample-data.ts` mock       | `GET /api/v1/data/centers` (proposed)          |
+| `/centers/[id]` routes table | mock rows in component      | `GET /api/v1/data/routes?center_id=…` (proposed) |
+| RouteHero → Mapa stops       | `route-stops.ts` mock       | `GET /api/v1/data/routes/{route_id}/stops` (proposed) |
+| RouteHero → Camión truck viz | built locally from `truck_code` capacity | n/a — frontend-owned (no load planner in scope) |
+| Health badge (if added)      | not displayed               | `GET /api/v1/health` (live)                    |
+
+The frontend mocks all validate against the shared Zod schemas; swapping
+to real endpoints should be a fetch-only change.
 
 ## Base URL
 
@@ -14,22 +32,7 @@ API base path:
 /api/v1
 ```
 
-## Main Flow
-
-```txt
-Frontend
-  POST /api/v1/optimize/full
-Backend
-  returns { job_id, status, ws_url }
-Frontend
-  opens WebSocket /ws/jobs/{job_id}
-Backend
-  emits progress, partial route, final result, done/error
-Frontend
-  renders map, truck, pick list, KPIs, explanations
-```
-
-## Required Endpoints
+## Endpoints
 
 ### Health
 
@@ -37,130 +40,46 @@ Frontend
 GET /api/v1/health
 ```
 
-Response model:
+Response: `HealthResponse` (see `wiki/contracts/data-models.md`).
+
+### Database directory
+
+These back the `/clients`, `/drivers`, and `/trucks` directory pages.
+The frontend Zod schemas live in `src/lib/api/catalog.ts`.
 
 ```txt
-HealthResponse
+GET /api/v1/db/customers?limit=10000
+GET /api/v1/db/drivers?limit=10000
+GET /api/v1/db/trucks?limit=10000
 ```
 
-### List Routes / Transports
+Response: `list[Customer]`, `list[Driver]`, `list[Truck]` respectively.
 
-```txt
-GET /api/v1/data/routes
-GET /api/v1/data/transports
-GET /api/v1/data/transport/{transport_id}
-GET /api/v1/data/customers/{customer_id}
-```
-
-Primary list item:
-
-```txt
-TransportSummary
-```
-
-### List Centers (proposed)
+### Centers (proposed)
 
 ```txt
 GET /api/v1/data/centers
 ```
 
-Response: `list[Center]`. Backs the centers picker on the frontend `/` route.
-See `wiki/decisions/2026-05-09-centers-model.md`.
+Response: `list[Center]`. Backs the centers picker on `/`.
+See `wiki/decisions/2026-05-09-centers-model.md`. Until the backend
+implements this, the frontend reads `src/components/centers/sample-data.ts`.
 
-### Start Full Optimization
-
-```txt
-POST /api/v1/optimize/full
-```
-
-Request model:
+### Routes (proposed)
 
 ```txt
-OptimizeRequest
+GET /api/v1/data/routes?center_id={center_id}
+GET /api/v1/data/routes/{route_id}/stops
 ```
 
-Response:
-
-```json
-{
-  "job_id": "a3f2b1c8",
-  "status": "pending",
-  "ws_url": "/ws/jobs/a3f2b1c8"
-}
-```
-
-### WebSocket Job Updates
-
-```txt
-WS /ws/jobs/{job_id}
-```
-
-Messages:
-
-```txt
-WsProgress
-WsPartialResult
-WsResult
-WsDone
-WsError
-```
-
-### Optional Result Fetch
-
-Useful if the frontend refreshes after a job completes.
-
-```txt
-GET /api/v1/jobs/{job_id}
-```
-
-Response:
-
-```txt
-OptimizationResult
-```
-
-### Optional Exports
-
-```txt
-GET /api/v1/jobs/{job_id}/export/driver
-GET /api/v1/jobs/{job_id}/export/warehouse
-GET /api/v1/jobs/{job_id}/export/pitch
-```
-
-These should be JSON first. PDF/Excel export can be added later.
-
-## Progress Phases
-
-The backend emits these exact phase keys:
-
-| Phase key | pct | Message |
-|---|---:|---|
-| `geocoding` | 10 | Geocoding customer addresses... |
-| `distance_matrix` | 25 | Calculating road distances... |
-| `vrp_solving` | 45 | Optimising delivery route... |
-| `pallet_packing` | 65 | Planning truck load configuration... |
-| `pick_list` | 80 | Generating warehouse pick list... |
-| `visualization` | 90 | Building 3D visualization... |
-| `explanation` | 95 | Generating AI explanation... |
-| `done` | 100 | Optimisation complete |
-
-The frontend may render friendlier labels, but must recognize these keys.
-
-## Error Codes
-
-| Code | Meaning | Frontend behavior |
-|---|---|---|
-| `JOB_NOT_FOUND` | WebSocket connected to unknown job | Show session expired |
-| `TRANSPORT_NOT_FOUND` | Transport not in dataset | Show validation error |
-| `GEOCODING_FAILED` | Geocoding failed | Show warning and allow fallback |
-| `NO_FEASIBLE_ROUTE` | Solver found no route | Show reduce constraints hint |
-| `PACKING_OVERFLOW` | Load exceeds truck capacity | Show capacity alert |
-| `SOLVER_TIMEOUT` | Solver timed out | Show best result if available |
-| `AGENT_ERROR` | OpenAI explanation unavailable | Continue without explanation |
+The first returns `list[Route]` (the frontend-mock shape in
+`wiki/contracts/data-models.md` → "Route (frontend mock)"), scoped to a
+center. The second returns `list[DeliveryStop]` for the RouteHero map
+panel. Until these exist, the frontend uses the in-component mock rows
+and `src/components/routes/route-stops.ts`.
 
 ## Contract Rule
 
-The frontend should treat `WsResult.result` as the source of truth for final rendering.
-
-The backend should try to emit `WsPartialResult` after route optimization so the frontend can render the map before pallet packing finishes.
-
+Endpoint paths, request/response field names, and enum values must not
+change silently. Add new fields freely; renaming or removing requires a
+proposal in `wiki/decisions/`.
