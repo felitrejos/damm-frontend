@@ -27,7 +27,7 @@ export const centerColumns: ColumnDef<Center>[] = [
   {
     accessorKey: "center",
     header: "Center",
-    size: 220,
+    size: 300,
     cell: ({ row }) => (
       <div className="font-medium">{row.original.center}</div>
     ),
@@ -35,7 +35,7 @@ export const centerColumns: ColumnDef<Center>[] = [
   {
     accessorKey: "location",
     header: "Location",
-    size: 160,
+    size: 180,
     filterFn: (row, columnId, filterValue) => {
       const arr = filterValue as string[] | undefined;
       if (!arr || arr.length === 0) return true;
@@ -48,7 +48,7 @@ export const centerColumns: ColumnDef<Center>[] = [
   {
     accessorKey: "routes",
     header: "Routes",
-    size: 90,
+    size: 140,
     cell: ({ row }) => (
       <div className="tabular-nums">{row.original.routes}</div>
     ),
@@ -56,7 +56,7 @@ export const centerColumns: ColumnDef<Center>[] = [
   {
     accessorKey: "admin",
     header: "Admin",
-    size: 200,
+    size: 320,
     cell: ({ row }) => <div>{row.original.admin}</div>,
   },
   {

@@ -31,8 +31,8 @@ export function Header({ onToggleSidebar, sidebarOpen }: Props) {
           </svg>
         </button>
 
-        <span className="text-[13px] font-semibold tracking-tight text-ink">
-          SmartTruck
+        <span className="text-lg font-semibold tracking-tight text-ink">
+          Damm SmartRoutes
         </span>
       </div>
 
