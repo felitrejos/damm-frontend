@@ -76,7 +76,7 @@ type Props<T> = {
 };
 
 export function DataTable<T>({
-  data: initialData,
+  data,
   columns,
   getRowId,
   searchColumnId,
@@ -91,7 +91,6 @@ export function DataTable<T>({
   onRowClick,
   initialPageSize = 10,
 }: Props<T>) {
-  const [data] = React.useState(() => initialData);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     [],
   );
@@ -184,16 +183,20 @@ export function DataTable<T>({
                   ) : null}
                   <IconChevronDown />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuContent
+                  align="end"
+                  className="max-h-80 w-64 overflow-y-auto"
+                >
                   {uniqueFilterValues.map((value) => (
                     <DropdownMenuCheckboxItem
                       key={value}
+                      className="min-h-8 text-sm"
                       checked={selectedFilterValues.includes(value)}
                       onCheckedChange={(checked) =>
                         toggleFilterValue(value, !!checked)
                       }
                     >
-                      {value}
+                      <span className="truncate">{value}</span>
                     </DropdownMenuCheckboxItem>
                   ))}
                 </DropdownMenuContent>
@@ -209,7 +212,12 @@ export function DataTable<T>({
         </div>
       ) : null}
       <div className="overflow-hidden rounded-lg border bg-card">
-        <Table>
+        <Table className="table-fixed">
+          <colgroup>
+            {table.getVisibleLeafColumns().map((column) => (
+              <col key={column.id} style={{ width: column.getSize() }} />
+            ))}
+          </colgroup>
           <TableHeader className="bg-muted">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
@@ -238,10 +246,10 @@ export function DataTable<T>({
                   key={row.id}
                   data-state={row.id === selectedRowId ? "selected" : undefined}
                   onClick={() => onRowClick?.(row.original)}
-                  className={onRowClick ? "cursor-pointer" : undefined}
+                  className={onRowClick ? "h-[53px] cursor-pointer" : "h-[53px]"}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="px-4">
+                    <TableCell key={cell.id} className="px-4 py-2 align-middle">
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext(),

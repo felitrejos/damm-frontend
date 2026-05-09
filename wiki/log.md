@@ -1,5 +1,19 @@
 # SmartTruck Wiki Log
 
+## [2026-05-09] frontend | Real Backend Directory Pages
+
+Connected the frontend directory pages to the real backend data source.
+
+- `/clients` now server-renders customers from `GET /api/v1/db/customers?limit=10000`.
+- `/drivers` now server-renders drivers from `GET /api/v1/db/drivers?limit=10000`.
+- `/trucks` now server-renders trucks from `GET /api/v1/db/trucks?limit=10000`.
+- Shared table behavior was tightened for async data, fixed row height,
+  compact filter dropdowns, and per-entity column sizing.
+- App header branding changed to `Damm SmartRoutes`.
+
+No shared contract change was required because the implementation uses existing
+backend database endpoints and validates payloads locally with Zod.
+
 ## [2026-05-09] CONTRACT_CHANGE_PROPOSAL | Add Center model + endpoint
 
 Frontend introduced a centers picker on `/` (data table of distribution
