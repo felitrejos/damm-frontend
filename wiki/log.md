@@ -1,5 +1,39 @@
 # SmartTruck Wiki Log
 
+## [2026-05-09] frontend | Route Hero merged with CRUD Center/Route work
+
+Reconciled `feat/route-hero-section` with `feat/crud-centers+routes` after
+both shipped to dev in parallel. Adopted the CRUD branch's structure as the
+backbone and plugged the hero into it:
+
+- `CentersListPage` now navigates with `router.push("/centers/[id]")` (CRUD
+  branch's pattern). The earlier in-page `selectedCenter` state was dropped.
+- `CenterRoutesView` was removed; its role is now covered by
+  `CenterDetailPage` from the CRUD branch.
+- `Route` schema is the CRUD branch's: `code`, `truck_code`, `centerId`
+  (camelCase). Dropped the hero's `transport_id`, `route_code`,
+  `truck_type`, `distance_km`, `duration_min` fields.
+- `RouteHero` now resolves capacity through a lookup of `truck_code` in
+  `sampleTrucks` (CRUD branch's mock), which gives the real `truck_type`
+  and `capacity_pallets`. `Slots N/M` and load percent are now consistent
+  with the route's truck.
+- `sample-data.ts` ships a `buildTruckVisualization(truckType)` builder
+  with truck-type-specific dimensions and pallet layouts:
+  - `van`  → 380×180×200 cm, 2 pallets out of 3 capacity.
+  - `6pal` → 540×240×240 cm, 5 pallets out of 6 capacity.
+  - `8pal` → 700×240×240 cm, 6 pallets out of 8 capacity (was the only
+    case before, now applied per truck type).
+- `KpiStrip` lost the Distance / Duration KPIs (not in the CRUD schema).
+  Will come back when real `RouteResult` payloads arrive.
+- `/preview/route/[id]` updated to the new sample IDs (101..901).
+
+Bug fixed:
+
+- Review flagged that the hero passed the same `sampleTruckVisualization`
+  regardless of truck. `/preview/route/5` (a van) showed `Slots 6/4 = 150%`
+  in a 620 cm box. Now resolved at the visualization layer rather than by
+  filtering out vans.
+
 ## [2026-05-09] frontend | Route Hero Section (truck + map tabs, temporary)
 
 Added a route hero section that opens when a route is selected. The hero

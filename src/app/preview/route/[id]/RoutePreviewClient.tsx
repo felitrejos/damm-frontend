@@ -19,10 +19,10 @@ export function RoutePreviewClient({ route }: Props) {
   useEffect(() => {
     setCrumbs([
       { label: "Preview", onClick: () => router.push("/") },
-      { label: route.route_code },
+      { label: route.code },
     ]);
     return () => setCrumbs([]);
-  }, [route.route_code, router, setCrumbs]);
+  }, [route.code, router, setCrumbs]);
 
   return (
     <PageLayout>

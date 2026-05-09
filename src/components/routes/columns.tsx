@@ -12,93 +12,55 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { TruckType } from "@/lib/schemas/domain";
 
-export const schema = z.object({
+// Inspired by damm-backend TransportSummary: route_code, driver_name, date,
+// stop_count, truck_type. `centerId` scopes the route to a specific warehouse
+// (Center) — frontend addition.
+export const routeSchema = z.object({
   id: z.number(),
-  center_id: z.number(),
-  transport_id: z.string(),
-  route_code: z.string(),
+  code: z.string(),
   driver_name: z.string(),
-  truck_type: TruckType,
-  date: z.string(),
+  truck_code: z.string(),
   stops: z.number(),
-  distance_km: z.number(),
-  duration_min: z.number(),
+  date: z.string(), // ISO YYYY-MM-DD
+  centerId: z.number(),
 });
 
-export type Route = z.infer<typeof schema>;
-
-function formatDuration(min: number) {
-  const h = Math.floor(min / 60);
-  const m = Math.round(min % 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
+export type Route = z.infer<typeof routeSchema>;
 
 export const routeColumns: ColumnDef<Route>[] = [
   {
-    accessorKey: "route_code",
+    accessorKey: "code",
     header: "Route",
-    size: 200,
-    cell: ({ row }) => (
-      <div className="font-medium">{row.original.route_code}</div>
-    ),
+    size: 140,
+    cell: ({ row }) => <div className="font-medium">{row.original.code}</div>,
   },
   {
     accessorKey: "driver_name",
     header: "Driver",
-    size: 220,
-    cell: ({ row }) => (
-      <div className="text-muted-foreground">{row.original.driver_name}</div>
-    ),
+    size: 200,
+    cell: ({ row }) => <div>{row.original.driver_name}</div>,
   },
   {
-    accessorKey: "truck_type",
+    accessorKey: "truck_code",
     header: "Truck",
     size: 120,
-    filterFn: (row, columnId, filterValue) => {
-      const arr = filterValue as string[] | undefined;
-      if (!arr || arr.length === 0) return true;
-      return arr.includes(row.getValue(columnId) as string);
-    },
     cell: ({ row }) => (
-      <div className="font-mono text-[12px] uppercase tracking-wide text-ink-subtle">
-        {row.original.truck_type}
-      </div>
+      <div className="text-muted-foreground">{row.original.truck_code}</div>
     ),
   },
   {
     accessorKey: "stops",
     header: "Stops",
-    size: 100,
+    size: 90,
     cell: ({ row }) => (
       <div className="tabular-nums">{row.original.stops}</div>
     ),
   },
   {
-    accessorKey: "distance_km",
-    header: "Distance",
-    size: 140,
-    cell: ({ row }) => (
-      <div className="tabular-nums">
-        {row.original.distance_km.toFixed(1)} km
-      </div>
-    ),
-  },
-  {
-    accessorKey: "duration_min",
-    header: "Duration",
-    size: 140,
-    cell: ({ row }) => (
-      <div className="tabular-nums">
-        {formatDuration(row.original.duration_min)}
-      </div>
-    ),
-  },
-  {
     accessorKey: "date",
     header: "Date",
-    size: 140,
+    size: 130,
     cell: ({ row }) => (
       <div className="text-muted-foreground tabular-nums">
         {row.original.date}

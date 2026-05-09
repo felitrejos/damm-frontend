@@ -31,7 +31,7 @@ export function RouteMapTab({ route }: RouteMapTabProps) {
             <p className="mt-1 max-w-sm text-[12px] text-ink-subtle">
               Stops, route polyline and depot for{" "}
               <span className="font-medium text-ink-muted">
-                {route.route_code}
+                {route.code}
               </span>{" "}
               will render here. Implementation pending (mapcn + MapLibre).
             </p>

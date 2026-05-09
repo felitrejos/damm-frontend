@@ -3,6 +3,8 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Truck } from "@/lib/api/catalog";
 
+export type { Truck };
+
 export const truckColumns: ColumnDef<Truck>[] = [
   {
     accessorKey: "code",

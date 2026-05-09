@@ -1,28 +1,33 @@
 "use client";
 
+import { useMemo } from "react";
 import { IconArrowLeft, IconMap2, IconTruck } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
+import { sampleTrucks } from "@/components/trucks/sample-data";
 
 import type { Route } from "./columns";
 import { RouteMapTab } from "./RouteMapTab";
 import { RouteTruckTab } from "./RouteTruckTab";
-import { sampleTruckVisualization } from "./sample-data";
+import { buildTruckVisualization } from "./sample-data";
 
 type RouteHeroProps = {
   route: Route;
   onBack: () => void;
 };
 
-const TRUCK_CAPACITY: Record<Route["truck_type"], number> = {
-  "6pal": 6,
-  "8pal": 8,
-  van: 4,
-};
-
 export function RouteHero({ route, onBack }: RouteHeroProps) {
-  const capacity = TRUCK_CAPACITY[route.truck_type];
+  const truck = useMemo(
+    () => sampleTrucks.find((t) => t.code === route.truck_code) ?? null,
+    [route.truck_code],
+  );
+  const truckType = (truck?.truck_type ?? "8pal") as "van" | "6pal" | "8pal";
+  const capacity = truck?.capacity_pallets ?? (truckType === "van" ? 3 : truckType === "6pal" ? 6 : 8);
+  const visualization = useMemo(
+    () => buildTruckVisualization(truckType),
+    [truckType],
+  );
 
   return (
     <section
@@ -47,14 +52,14 @@ export function RouteHero({ route, onBack }: RouteHeroProps) {
             id="route-hero-title"
             className="headline text-ink truncate"
           >
-            {route.route_code}
+            {route.code}
           </h2>
           <span className="rounded-md border border-border bg-surface-2 px-2 py-0.5 text-[11px] font-mono uppercase tracking-wide text-ink-subtle">
-            {route.truck_type}
+            {truckType}
           </span>
         </div>
 
-        <KpiStrip route={route} />
+        <KpiStrip route={route} truckCode={route.truck_code} />
       </header>
 
       <Tabs defaultValue="truck" className="gap-4">
@@ -71,7 +76,7 @@ export function RouteHero({ route, onBack }: RouteHeroProps) {
 
         <TabsPanel value="truck">
           <RouteTruckTab
-            visualization={sampleTruckVisualization}
+            visualization={visualization}
             capacityPallets={capacity}
           />
         </TabsPanel>
@@ -84,21 +89,16 @@ export function RouteHero({ route, onBack }: RouteHeroProps) {
   );
 }
 
-function KpiStrip({ route }: { route: Route }) {
-  const hours = Math.floor(route.duration_min / 60);
-  const minutes = Math.round(route.duration_min % 60);
-  const duration = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
-
+function KpiStrip({ route, truckCode }: { route: Route; truckCode: string }) {
   const kpis = [
     { label: "Driver", value: route.driver_name },
+    { label: "Truck", value: truckCode },
     { label: "Stops", value: String(route.stops) },
-    { label: "Distance", value: `${route.distance_km.toFixed(1)} km` },
-    { label: "Duration", value: duration },
     { label: "Date", value: route.date },
   ];
 
   return (
-    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {kpis.map(({ label, value }) => (
         <div
           key={label}
