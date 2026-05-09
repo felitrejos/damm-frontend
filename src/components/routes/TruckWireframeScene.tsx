@@ -11,6 +11,10 @@ import {
 } from "@react-three/drei";
 import { useMemo, useRef } from "react";
 import { DoubleSide, type Group } from "three";
+import {
+  detectPalletItemKind,
+  palletDisplayColor,
+} from "./palletColor";
 import type {
   DimensionsCm,
   PositionCm,
@@ -159,12 +163,16 @@ interface TruckWireframeSceneProps {
   visualization: TruckVisualization;
   hoveredPalletId?: string | null;
   onHoverPallet?: (id: string | null) => void;
+  // Forwarded to drei <OrbitControls>. Lets the parent run dolly-in/dolly-out
+  // imperatively from external buttons without putting state inside the canvas.
+  controlsRef?: React.MutableRefObject<unknown>;
 }
 
 export function TruckWireframeScene({
   visualization,
   hoveredPalletId = null,
   onHoverPallet,
+  controlsRef,
 }: TruckWireframeSceneProps) {
   return (
     <Canvas
@@ -188,6 +196,7 @@ export function TruckWireframeScene({
       />
 
       <OrbitControls
+        ref={controlsRef as React.RefObject<never> | undefined}
         makeDefault
         enableDamping
         dampingFactor={0.06}
@@ -761,16 +770,6 @@ interface PalletProps {
   onHover?: (id: string | null) => void;
 }
 
-type ItemKind = "case-bottle" | "case-can" | "barrel" | null;
-
-function detectItemKind(pallet: VizPallet): ItemKind {
-  if (pallet.is_return) return null;
-  const s = pallet.products_summary.join(" ").toLowerCase();
-  if (/barrel|barril|gas/.test(s)) return "barrel";
-  if (/can|lat[ae]|soft\s*drink/.test(s)) return "case-can";
-  return "case-bottle";
-}
-
 // Pack same-size items into rows × columns × layers inside the pallet stack
 // volume. Returns each item's center position in pallet-local cm coords.
 function packGrid(
@@ -809,7 +808,8 @@ interface PalletItemsProps {
 }
 
 function PalletItems({ pallet, truck }: PalletItemsProps) {
-  const kind = useMemo(() => detectItemKind(pallet), [pallet]);
+  const kind = useMemo(() => detectPalletItemKind(pallet), [pallet]);
+  const color = useMemo(() => palletDisplayColor(pallet), [pallet]);
 
   // Compute item positions once per pallet/kind.
   const positions = useMemo(() => {
@@ -860,7 +860,7 @@ function PalletItems({ pallet, truck }: PalletItemsProps) {
             18,
           ]}
         />
-        <meshBasicMaterial color={pallet.color} />
+        <meshBasicMaterial color={color} />
         {scenePositions.map((pos, i) => (
           <Instance key={i} position={pos} />
         ))}
@@ -923,6 +923,7 @@ function Pallet({ pallet, truck, isHovered, onHover }: PalletProps) {
   );
 
   const isReturn = pallet.is_return;
+  const displayColor = palletDisplayColor(pallet);
 
   // Returnables get a wireframe-only render with a dashed hatching pattern on
   // the top face to signal "empty containers". No transparent fill anywhere on
@@ -989,14 +990,14 @@ function Pallet({ pallet, truck, isHovered, onHover }: PalletProps) {
           <mesh>
             <boxGeometry args={[stackLength, stackHeightUnit, stackWidth]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-            <Edges color={pallet.color} linewidth={edgeWidth} />
+            <Edges color={displayColor} linewidth={edgeWidth} />
           </mesh>
 
           {hatchLines.map((segment, i) => (
             <Line
               key={`hatch-${i}`}
               points={segment}
-              color={pallet.color}
+              color={displayColor}
               lineWidth={0.5}
               transparent
               opacity={isHovered ? 0.85 : 0.6}

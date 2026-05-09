@@ -1,11 +1,27 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
-import { IconBoxSeam, IconCube3dSphere } from "@tabler/icons-react";
+import { useRef, useState } from "react";
+import {
+  IconBoxSeam,
+  IconCube3dSphere,
+  IconMinus,
+  IconPlus,
+} from "@tabler/icons-react";
+import type { Vector3 } from "three";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { palletDisplayColor } from "./palletColor";
 import type { TruckVisualization, VizPallet } from "./types";
+
+// Minimal shape we touch on drei's OrbitControls — enough for dolly without
+// pulling three-stdlib types into this file.
+type OrbitControlsHandle = {
+  object: { position: Vector3 };
+  target: Vector3;
+  update: () => void;
+};
 
 // React-three-fiber relies on `window` and a real WebGL context, so it must
 // not run during server rendering. Dynamic + ssr:false keeps the bundle out
@@ -38,6 +54,19 @@ export function RouteTruckTab({
   // pointer hovering either side highlights the matching pallet on both.
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
+  const controlsRef = useRef<OrbitControlsHandle | null>(null);
+
+  // Imperative dolly: move the camera toward (factor < 1) or away (factor > 1)
+  // from the orbit target along the current view vector.
+  const zoomBy = (factor: number) => {
+    const c = controlsRef.current;
+    if (!c) return;
+    const offset = c.object.position.clone().sub(c.target);
+    offset.multiplyScalar(factor);
+    c.object.position.copy(c.target).add(offset);
+    c.update();
+  };
+
   return (
     <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-5">
       <div
@@ -50,7 +79,30 @@ export function RouteTruckTab({
           visualization={visualization}
           hoveredPalletId={hoveredId}
           onHoverPallet={setHoveredId}
+          controlsRef={controlsRef as React.MutableRefObject<unknown>}
         />
+        <div className="pointer-events-none absolute right-2 top-2 z-10 flex flex-col gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            onClick={() => zoomBy(0.83)}
+            aria-label="Zoom in"
+            className="pointer-events-auto bg-surface-2/80 backdrop-blur-sm"
+          >
+            <IconPlus />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            onClick={() => zoomBy(1.2)}
+            aria-label="Zoom out"
+            className="pointer-events-auto bg-surface-2/80 backdrop-blur-sm"
+          >
+            <IconMinus />
+          </Button>
+        </div>
       </div>
 
       <aside className="flex flex-col gap-3" aria-label="Truck load summary">
@@ -125,6 +177,7 @@ function PalletList({ pallets, hoveredId, onHover }: PalletListProps) {
       <ol className="flex flex-col gap-1.5 overflow-y-auto pr-1">
         {pallets.map((pallet) => {
           const active = hoveredId === pallet.pallet_id;
+          const swatch = palletDisplayColor(pallet);
           return (
             <li
               key={pallet.pallet_id}
@@ -141,10 +194,10 @@ function PalletList({ pallets, hoveredId, onHover }: PalletListProps) {
                 aria-hidden
                 className="mt-1 size-2.5 shrink-0 rounded-full"
                 style={{
-                  backgroundColor: pallet.color,
+                  backgroundColor: swatch,
                   boxShadow: active
-                    ? `0 0 18px ${pallet.color}`
-                    : `0 0 12px ${pallet.color}`,
+                    ? `0 0 18px ${swatch}`
+                    : `0 0 12px ${swatch}`,
                 }}
               />
               <div className="min-w-0 flex-1">
