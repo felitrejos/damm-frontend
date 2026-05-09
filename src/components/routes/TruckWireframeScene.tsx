@@ -3,24 +3,22 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   Edges,
-  Instance,
-  Instances,
   Line,
   OrbitControls,
+  OrthographicCamera,
   PerspectiveCamera,
 } from "@react-three/drei";
 import { useMemo, useRef } from "react";
-import { DoubleSide, type Group } from "three";
-import {
-  detectPalletItemKind,
-  palletDisplayColor,
-} from "./palletColor";
+import { BackSide, DoubleSide, type Group } from "three";
+import { palletDisplayColor } from "./palletColor";
 import type {
   DimensionsCm,
   PositionCm,
   TruckVisualization,
   VizPallet,
 } from "./types";
+
+export type TruckViewMode = "orbit" | "iso";
 
 // =============================================================================
 // Constants — all proportions live here to keep the components readable.
@@ -35,6 +33,11 @@ const SCENE = {
 
   // Pallet's wooden base height (the platform under the product stack).
   palletBaseHeightCm: 15,
+
+  // Cabin body dimensions. Used both by the Cabin component and by the
+  // horizontal centering offset below.
+  cabinLengthCm: 170,
+  cabinHeightCm: 200,
 
   // Gap between cabin back wall and cargo box front wall.
   cabinCargoGapCm: 18,
@@ -61,17 +64,6 @@ const SCENE = {
   // Wheel sizes per layout. Real Damm 6/8-pal trucks run ~22.5" tires (~52 cm radius).
   truckWheelRadiusCm: 50,
   vanWheelRadiusCm: 36,
-};
-
-// Cargo unit footprints, aligned with backend ProductDimensions defaults.
-// Used to build the per-item visualization inside each pallet.
-//   1 bottle case = 1 unit footprint (40×30 cm).
-//   1 can case    ≈ 0.8 unit          (33×24 cm).
-//   1 barrel      ≈ 4 units (cylinder, 60 cm Ø × 60 cm tall).
-const ITEM = {
-  caseBottle: { length_cm: 40, width_cm: 30, height_cm: 25 },
-  caseCan: { length_cm: 33, width_cm: 24, height_cm: 25 },
-  barrel: { radius_cm: 30, height_cm: 60 },
 };
 
 const COLOR = {
@@ -120,6 +112,13 @@ const COLOR = {
 
 const CHASSIS_LIFT_SCENE = SCENE.chassisHeightCm * CM_TO_SCENE;
 
+// Horizontal offset that re-centers the truck (cargo box + cabin) at scene
+// X = 0 inside the Stage group. Without it the cabin is purely on the -X
+// side of the cargo box, so the whole truck visually drifts left and the
+// orbit pivot ends up off-centre.
+const TRUCK_CENTER_OFFSET_SCENE =
+  ((SCENE.cabinLengthCm + SCENE.cabinCargoGapCm) / 2) * CM_TO_SCENE;
+
 // =============================================================================
 // Helpers
 // =============================================================================
@@ -166,6 +165,10 @@ interface TruckWireframeSceneProps {
   // Forwarded to drei <OrbitControls>. Lets the parent run dolly-in/dolly-out
   // imperatively from external buttons without putting state inside the canvas.
   controlsRef?: React.MutableRefObject<unknown>;
+  // "orbit" = adaptive perspective camera (default, free 3D inspection).
+  // "iso" = orthographic camera at a fixed isometric angle (Cinema 4D
+  // "Parallel" projection — flat look, parallel lines stay parallel).
+  viewMode?: TruckViewMode;
 }
 
 export function TruckWireframeScene({
@@ -173,6 +176,7 @@ export function TruckWireframeScene({
   hoveredPalletId = null,
   onHoverPallet,
   controlsRef,
+  viewMode = "orbit",
 }: TruckWireframeSceneProps) {
   return (
     <Canvas
@@ -187,7 +191,11 @@ export function TruckWireframeScene({
       <pointLight position={[5, 8, 4]} intensity={0.8} color="#78e7ff" />
       <pointLight position={[-5, 3, -4]} intensity={0.4} color="#ff6b9a" />
 
-      <AdaptiveCamera dimensions={visualization.truck_dims} />
+      {viewMode === "iso" ? (
+        <IsoCamera dimensions={visualization.truck_dims} />
+      ) : (
+        <AdaptiveCamera dimensions={visualization.truck_dims} />
+      )}
       <YardFloor />
       <Stage
         visualization={visualization}
@@ -195,7 +203,11 @@ export function TruckWireframeScene({
         onHoverPallet={onHoverPallet}
       />
 
+      {/* Re-mount OrbitControls when the camera type changes so the controls
+          re-bind to the freshly mounted default camera. Without the key, the
+          controls keep an internal reference to the previous camera. */}
       <OrbitControls
+        key={viewMode}
         ref={controlsRef as React.RefObject<never> | undefined}
         makeDefault
         enableDamping
@@ -204,7 +216,7 @@ export function TruckWireframeScene({
         maxDistance={22}
         minPolarAngle={Math.PI * 0.18}
         maxPolarAngle={Math.PI * 0.5}
-        target={[0.2, 2.0, 0]}
+        target={[0, 2.0, 0]}
       />
     </Canvas>
   );
@@ -232,6 +244,28 @@ function AdaptiveCamera({ dimensions }: DimensionsProps) {
   );
 }
 
+// Orthographic isometric camera. Parallel projection — no foreshortening, like
+// Cinema 4D's "Parallel" view. Position fixes the 3/4 isometric direction;
+// the orthographic `zoom` controls framing and scales inversely with truck
+// length so a van and an 8pal both fit the canvas with similar margins.
+function IsoCamera({ dimensions }: DimensionsProps) {
+  const { size } = useThree();
+  const isNarrow = size.width < 700;
+  const lengthFactor = Math.max(0.78, safe(dimensions.length_cm, 540) / 620);
+  const baseZoom = isNarrow ? 38 : 56;
+  const zoom = baseZoom / lengthFactor;
+
+  return (
+    <OrthographicCamera
+      makeDefault
+      position={[10, 8, 10]}
+      zoom={zoom}
+      near={-100}
+      far={200}
+    />
+  );
+}
+
 // =============================================================================
 // Stage — root truck group, applies idle bob + 3/4 view rotation.
 // =============================================================================
@@ -255,24 +289,29 @@ function Stage({
 
   return (
     <group ref={groupRef} rotation={[0, -0.42, 0]} position={[0, -1.25, 0]}>
-      {/* Body sub-group is lifted by chassis height. Wheels stay at ground. */}
-      <group position={[0, CHASSIS_LIFT_SCENE, 0]}>
-        <Chassis dimensions={visualization.truck_dims} />
-        <CargoBox dimensions={visualization.truck_dims} />
-        <CargoDeck dimensions={visualization.truck_dims} />
-        <CargoSlotGrid dimensions={visualization.truck_dims} />
-        <CargoRibs dimensions={visualization.truck_dims} />
-        <CornerPillars dimensions={visualization.truck_dims} />
-        <RearDoor dimensions={visualization.truck_dims} />
-        <Cabin dimensions={visualization.truck_dims} />
-        <Pallets
-          pallets={visualization.pallets}
-          truck={visualization.truck_dims}
-          hoveredPalletId={hoveredPalletId}
-          onHoverPallet={onHoverPallet}
-        />
+      {/* Centering wrapper: shifts the whole truck so its geometric centre
+          (cargo box + cabin combined) sits at scene X = 0. The orbit pivot
+          then matches the truck's visual centre on every truck length. */}
+      <group position={[TRUCK_CENTER_OFFSET_SCENE, 0, 0]}>
+        {/* Body sub-group is lifted by chassis height. Wheels stay at ground. */}
+        <group position={[0, CHASSIS_LIFT_SCENE, 0]}>
+          <Chassis dimensions={visualization.truck_dims} />
+          <CargoBox dimensions={visualization.truck_dims} />
+          <CargoDeck dimensions={visualization.truck_dims} />
+          <CargoSlotGrid dimensions={visualization.truck_dims} />
+          <CargoRibs dimensions={visualization.truck_dims} />
+          <CornerPillars dimensions={visualization.truck_dims} />
+          <RearDoor dimensions={visualization.truck_dims} />
+          <Cabin dimensions={visualization.truck_dims} />
+          <Pallets
+            pallets={visualization.pallets}
+            truck={visualization.truck_dims}
+            hoveredPalletId={hoveredPalletId}
+            onHoverPallet={onHoverPallet}
+          />
+        </group>
+        <WheelSet dimensions={visualization.truck_dims} />
       </group>
-      <WheelSet dimensions={visualization.truck_dims} />
     </group>
   );
 }
@@ -366,12 +405,19 @@ function CargoBox({ dimensions }: DimensionsProps) {
 
   return (
     <group position={center}>
+      {/* side=BackSide only renders the inner faces — from outside the truck
+          those are the FAR walls (rear, far side, top from a 3/4 view).
+          They act as a soft semi-opaque backdrop that hides edges of stuff
+          behind the cargo, while the near walls stay invisible so you can
+          still look INTO the load. depthWrite=false avoids occluding items. */}
       <mesh>
         <boxGeometry args={[length, height, width]} />
         <meshBasicMaterial
           transparent
-          opacity={COLOR.cargoFillOpacity}
+          opacity={0.18}
           color={COLOR.cargoFill}
+          side={BackSide}
+          depthWrite={false}
         />
         <Edges color={COLOR.cargoEdge} linewidth={1.4} />
       </mesh>
@@ -590,8 +636,8 @@ function RearDoor({ dimensions }: DimensionsProps) {
 // =============================================================================
 
 function Cabin({ dimensions }: DimensionsProps) {
-  const cabinLengthCm = 170;
-  const cabinHeightCm = 200;
+  const cabinLengthCm = SCENE.cabinLengthCm;
+  const cabinHeightCm = SCENE.cabinHeightCm;
   const cabinWidthCm = Math.max(120, dimensions.width_cm - 10);
   const gap = SCENE.cabinCargoGapCm;
 
@@ -620,13 +666,19 @@ function Cabin({ dimensions }: DimensionsProps) {
 
   return (
     <group position={center}>
-      {/* Main body box */}
+      {/* Main body box. side=BackSide renders only the inner faces of the box,
+          which from the camera's POV are the FAR walls of the cabin. The near
+          walls disappear so we look "through" the front of the cabin without
+          their semi-opaque alpha tinting the items behind. depthWrite=false
+          stops the wall fill from occluding the windshield/window outlines. */}
       <mesh>
         <boxGeometry args={[length, height, width]} />
         <meshBasicMaterial
           transparent
-          opacity={COLOR.cabinFillOpacity}
+          opacity={0.18}
           color={COLOR.cabinFill}
+          side={BackSide}
+          depthWrite={false}
         />
         <Edges color={COLOR.cabinEdge} linewidth={1.1} />
       </mesh>
@@ -770,122 +822,9 @@ interface PalletProps {
   onHover?: (id: string | null) => void;
 }
 
-// Pack same-size items into rows × columns × layers inside the pallet stack
-// volume. Returns each item's center position in pallet-local cm coords.
-function packGrid(
-  pallet: VizPallet,
-  cellL: number,
-  cellW: number,
-  cellH: number,
-): Array<[number, number, number]> {
-  const stackH = Math.max(
-    0,
-    safe(pallet.dims.height_cm, 0) - SCENE.palletBaseHeightCm,
-  );
-  const layers = Math.max(0, Math.floor(stackH / cellH));
-  const colsX = Math.max(1, Math.floor(safe(pallet.dims.length_cm, 1) / cellL));
-  const colsY = Math.max(1, Math.floor(safe(pallet.dims.width_cm, 1) / cellW));
-  const padX = (pallet.dims.length_cm - colsX * cellL) / 2;
-  const padY = (pallet.dims.width_cm - colsY * cellW) / 2;
-  const positions: Array<[number, number, number]> = [];
-  for (let layer = 0; layer < layers; layer++) {
-    for (let cy = 0; cy < colsY; cy++) {
-      for (let cx = 0; cx < colsX; cx++) {
-        positions.push([
-          padX + cx * cellL + cellL / 2,
-          padY + cy * cellW + cellW / 2,
-          SCENE.palletBaseHeightCm + layer * cellH + cellH / 2,
-        ]);
-      }
-    }
-  }
-  return positions;
-}
-
-interface PalletItemsProps {
-  pallet: VizPallet;
-  truck: DimensionsCm;
-}
-
-function PalletItems({ pallet, truck }: PalletItemsProps) {
-  const kind = useMemo(() => detectPalletItemKind(pallet), [pallet]);
-  const color = useMemo(() => palletDisplayColor(pallet), [pallet]);
-
-  // Compute item positions once per pallet/kind.
-  const positions = useMemo(() => {
-    if (kind === "barrel") {
-      const cell = ITEM.barrel.radius_cm * 2;
-      return packGrid(pallet, cell, cell, ITEM.barrel.height_cm);
-    }
-    if (kind === "case-can") {
-      return packGrid(
-        pallet,
-        ITEM.caseCan.length_cm,
-        ITEM.caseCan.width_cm,
-        ITEM.caseCan.height_cm,
-      );
-    }
-    if (kind === "case-bottle") {
-      return packGrid(
-        pallet,
-        ITEM.caseBottle.length_cm,
-        ITEM.caseBottle.width_cm,
-        ITEM.caseBottle.height_cm,
-      );
-    }
-    return [];
-  }, [pallet, kind]);
-
-  if (kind === null || positions.length === 0) return null;
-
-  const scenePositions = positions.map(([px, py, pz]) =>
-    toScenePos(
-      {
-        x: pallet.position.x + px,
-        y: pallet.position.y + py,
-        z: pallet.position.z + pz,
-      },
-      truck,
-    ),
-  );
-
-  if (kind === "barrel") {
-    return (
-      <Instances limit={positions.length}>
-        <cylinderGeometry
-          args={[
-            ITEM.barrel.radius_cm * CM_TO_SCENE,
-            ITEM.barrel.radius_cm * CM_TO_SCENE,
-            ITEM.barrel.height_cm * CM_TO_SCENE,
-            18,
-          ]}
-        />
-        <meshBasicMaterial color={color} />
-        {scenePositions.map((pos, i) => (
-          <Instance key={i} position={pos} />
-        ))}
-      </Instances>
-    );
-  }
-
-  const dim = kind === "case-can" ? ITEM.caseCan : ITEM.caseBottle;
-  return (
-    <Instances limit={positions.length}>
-      <boxGeometry
-        args={[
-          dim.length_cm * CM_TO_SCENE,
-          dim.height_cm * CM_TO_SCENE,
-          dim.width_cm * CM_TO_SCENE,
-        ]}
-      />
-      <meshBasicMaterial color={pallet.color} />
-      {scenePositions.map((pos, i) => (
-        <Instance key={i} position={pos} />
-      ))}
-    </Instances>
-  );
-}
-
+// Each pallet renders as a solid filled column: a wooden base plus a coloured
+// stack box. Returnables are translucent so they read as "empty containers"
+// without losing the volumetric silhouette.
 function Pallet({ pallet, truck, isHovered, onHover }: PalletProps) {
   const totalHeight = safe(pallet.dims.height_cm, 1);
   const baseHeight = Math.min(SCENE.palletBaseHeightCm, totalHeight);
@@ -924,31 +863,6 @@ function Pallet({ pallet, truck, isHovered, onHover }: PalletProps) {
 
   const isReturn = pallet.is_return;
   const displayColor = palletDisplayColor(pallet);
-
-  // Returnables get a wireframe-only render with a dashed hatching pattern on
-  // the top face to signal "empty containers". No transparent fill anywhere on
-  // the stack — that was the source of the angle-dependent face flicker.
-  const hatchLines = useMemo(() => {
-    if (!isReturn || stackHeight <= 0) return [];
-    const linesCount = 4;
-    const top = stackHeightUnit / 2 + 0.005;
-    return Array.from({ length: linesCount }, (_, i) => {
-      const t = (i + 0.5) / linesCount;
-      return [
-        [-stackLength / 2, top, -stackWidth / 2 + stackWidth * t] as [
-          number,
-          number,
-          number,
-        ],
-        [stackLength / 2, top, -stackWidth / 2 + stackWidth * t] as [
-          number,
-          number,
-          number,
-        ],
-      ];
-    });
-  }, [isReturn, stackHeight, stackHeightUnit, stackLength, stackWidth]);
-
   const edgeWidth = isHovered ? 2.0 : 1.3;
 
   return (
@@ -962,50 +876,25 @@ function Pallet({ pallet, truck, isHovered, onHover }: PalletProps) {
         onHover?.(null);
       }}
     >
-      {/* Pallet base (wood/plastic platform). */}
       <group position={baseCenter}>
         <mesh>
           <boxGeometry args={[baseLength, baseHeightUnit, baseWidth]} />
-          <meshBasicMaterial
-            transparent
-            opacity={COLOR.palletBaseOpacity}
-            color={COLOR.palletBase}
-            depthWrite={false}
-          />
+          <meshBasicMaterial color={COLOR.palletBase} />
           <Edges color={COLOR.palletBaseEdge} linewidth={0.9} />
         </mesh>
       </group>
 
-      {/* Real cargo items: cases (boxes) for bottles/cans, cylinders for barrels.
-          Solid materials and instanced rendering — no transparency, so the look
-          is identical from any camera angle. */}
-      {!isReturn && stackHeight > 0 && (
-        <PalletItems pallet={pallet} truck={truck} />
-      )}
-
-      {/* Outer wireframe of the pallet stack — edges only, fully transparent fill
-          (depthWrite=false) so it never causes alpha-sort flicker. */}
       {stackHeight > 0 && (
         <group position={stackCenter}>
           <mesh>
             <boxGeometry args={[stackLength, stackHeightUnit, stackWidth]} />
-            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+            <meshBasicMaterial
+              color={displayColor}
+              transparent={isReturn}
+              opacity={isReturn ? 0.55 : 1}
+            />
             <Edges color={displayColor} linewidth={edgeWidth} />
           </mesh>
-
-          {hatchLines.map((segment, i) => (
-            <Line
-              key={`hatch-${i}`}
-              points={segment}
-              color={displayColor}
-              lineWidth={0.5}
-              transparent
-              opacity={isHovered ? 0.85 : 0.6}
-              dashed
-              dashSize={0.05}
-              gapSize={0.04}
-            />
-          ))}
         </group>
       )}
     </group>

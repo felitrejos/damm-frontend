@@ -2,13 +2,13 @@ import type { VizPallet } from "./types";
 
 // Three-color visualization palette: one color per cargo unit kind. Backend
 // pallet.color is intentionally ignored at render time so the load reads at a
-// glance ("yellow = bottle cases, blue = cans, red = barrels"). When real
+// glance ("red = bottle cases, blue = cans, gray = barrels"). When real
 // `RouteResult` payloads arrive we still classify by the products_summary;
 // later the backend can ship a category field and this helper goes away.
 export const PALLET_COLOR = {
-  caseBottle: "#f7c948",
+  caseBottle: "#ef4444",
   caseCan: "#38bdf8",
-  barrel: "#ef4444",
+  barrel: "#9ca3af",
 } as const;
 
 export type PalletItemKind = "case-bottle" | "case-can" | "barrel" | null;
