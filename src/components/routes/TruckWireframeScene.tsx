@@ -93,6 +93,7 @@ function AnimatedTruck({ visualization }: AnimatedTruckProps) {
     <group ref={groupRef} rotation={[0, -0.42, 0]} position={[0, -1.25, 0]}>
       <CargoBox dimensions={visualization.truck_dims} />
       <CargoFloor dimensions={visualization.truck_dims} />
+      <CargoRibs dimensions={visualization.truck_dims} />
       <RearDoor dimensions={visualization.truck_dims} />
       <ForwardArrow dimensions={visualization.truck_dims} />
       <Cabin truckDimensions={visualization.truck_dims} />
@@ -101,6 +102,7 @@ function AnimatedTruck({ visualization }: AnimatedTruckProps) {
         truckDimensions={visualization.truck_dims}
       />
       <WheelSet truckDimensions={visualization.truck_dims} />
+      <WheelArches dimensions={visualization.truck_dims} />
     </group>
   );
 }
@@ -325,6 +327,40 @@ function Cabin({ truckDimensions }: CabinProps) {
           <meshBasicMaterial color="#f7c948" transparent opacity={0.85} />
         </mesh>
       ))}
+
+      {/* Front grille — short horizontal lines between the headlights */}
+      {[-0.18, -0.27, -0.36].map((yRatio) => (
+        <Line
+          key={`grille-${yRatio}`}
+          points={[
+            [-length * 0.5, height * yRatio, -width * 0.28],
+            [-length * 0.5, height * yRatio, width * 0.28],
+          ]}
+          color={COLOR_GRID_PRIMARY}
+          lineWidth={0.6}
+          transparent
+          opacity={0.55}
+        />
+      ))}
+
+      {/* Front bumper bar */}
+      <mesh position={[-length * 0.52, -height * 0.46, 0]}>
+        <boxGeometry args={[length * 0.06, height * 0.06, width * 0.94]} />
+        <meshBasicMaterial color="#0a1014" />
+        <Edges color={COLOR_CABIN_EDGE} linewidth={0.9} />
+      </mesh>
+
+      {/* Side mirrors — small mounted rectangles at window height */}
+      {[-1, 1].map((side) => (
+        <mesh
+          key={`mirror-${side}`}
+          position={[-length * 0.34, height * 0.18, side * (width * 0.55)]}
+        >
+          <boxGeometry args={[length * 0.05, height * 0.18, width * 0.04]} />
+          <meshBasicMaterial color="#0a1014" />
+          <Edges color={COLOR_CABIN_EDGE} linewidth={0.8} />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -543,6 +579,67 @@ function Wheel({ position, radius }: WheelProps) {
           opacity={0.78}
         />
       ))}
+    </group>
+  );
+}
+
+function WheelArches({ dimensions }: DimensionsProps) {
+  const archCenters = [
+    dimensions.length_cm * 0.62,
+    dimensions.length_cm * 0.78,
+  ];
+  const archRadiusCm = 64;
+  const archHeightCm = archRadiusCm;
+  const segments = 18;
+  const sides = [0, dimensions.width_cm];
+
+  const arcPoints = (centerX: number, y: number) =>
+    Array.from({ length: segments + 1 }, (_, i) => {
+      const t = (i / segments) * Math.PI;
+      const x = centerX - Math.cos(t) * archRadiusCm;
+      const z = Math.sin(t) * archHeightCm;
+      return toScenePosition({ x, y, z }, dimensions);
+    });
+
+  return (
+    <group>
+      {sides.flatMap((y) =>
+        archCenters.map((cx) => (
+          <Line
+            key={`arch-${y}-${cx}`}
+            points={arcPoints(cx, y)}
+            color={COLOR_CARGO_EDGE}
+            lineWidth={0.7}
+            transparent
+            opacity={0.55}
+          />
+        )),
+      )}
+    </group>
+  );
+}
+
+function CargoRibs({ dimensions }: DimensionsProps) {
+  const ribHeights = [0.32, 0.55, 0.78].map((r) => r * dimensions.height_cm);
+  const sides = [0, dimensions.width_cm];
+
+  return (
+    <group>
+      {sides.flatMap((y) =>
+        ribHeights.map((z) => (
+          <Line
+            key={`rib-${y}-${z}`}
+            points={[
+              toScenePosition({ x: 0, y, z }, dimensions),
+              toScenePosition({ x: dimensions.length_cm, y, z }, dimensions),
+            ]}
+            color={COLOR_CARGO_EDGE}
+            lineWidth={0.4}
+            transparent
+            opacity={0.22}
+          />
+        )),
+      )}
     </group>
   );
 }
