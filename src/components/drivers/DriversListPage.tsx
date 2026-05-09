@@ -11,9 +11,13 @@ import { driverColumns } from "./columns";
 
 type DriversListPageProps = {
   initialDrivers: Driver[];
+  initialError?: string;
 };
 
-export function DriversListPage({ initialDrivers }: DriversListPageProps) {
+export function DriversListPage({
+  initialDrivers,
+  initialError,
+}: DriversListPageProps) {
   const [drivers] = useState<Driver[]>(initialDrivers);
   const [selected, setSelected] = useState<Driver | null>(null);
   const { setCrumbs } = useBreadcrumb();
@@ -36,7 +40,12 @@ export function DriversListPage({ initialDrivers }: DriversListPageProps) {
           </p>
         </div>
 
-        {drivers.length === 0 ? (
+        {initialError ? (
+          <RemoteDataState
+            title="Could not load drivers"
+            description={initialError}
+          />
+        ) : drivers.length === 0 ? (
           <RemoteDataState
             title="No drivers found"
             description="The backend returned an empty driver list."

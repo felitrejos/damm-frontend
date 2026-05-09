@@ -11,9 +11,13 @@ import { clientColumns } from "./columns";
 
 type ClientsListPageProps = {
   initialClients: Customer[];
+  initialError?: string;
 };
 
-export function ClientsListPage({ initialClients }: ClientsListPageProps) {
+export function ClientsListPage({
+  initialClients,
+  initialError,
+}: ClientsListPageProps) {
   const [clients] = useState<Customer[]>(initialClients);
   const [selected, setSelected] = useState<Customer | null>(null);
   const { setCrumbs } = useBreadcrumb();
@@ -36,7 +40,12 @@ export function ClientsListPage({ initialClients }: ClientsListPageProps) {
           </p>
         </div>
 
-        {clients.length === 0 ? (
+        {initialError ? (
+          <RemoteDataState
+            title="Could not load clients"
+            description={initialError}
+          />
+        ) : clients.length === 0 ? (
           <RemoteDataState
             title="No clients found"
             description="The backend returned an empty customer list."

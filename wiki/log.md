@@ -14,6 +14,10 @@ Connected the frontend directory pages to the real backend data source.
 No shared contract change was required because the implementation uses existing
 backend database endpoints and validates payloads locally with Zod.
 
+Follow-up: directory pages now catch backend/API/schema failures during
+server-side data loading and render an in-page error state instead of returning
+a Next.js 500 response.
+
 ## [2026-05-09] CONTRACT_CHANGE_PROPOSAL | Add Center model + endpoint
 
 Frontend introduced a centers picker on `/` (data table of distribution

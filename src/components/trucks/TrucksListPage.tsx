@@ -11,9 +11,13 @@ import { truckColumns } from "./columns";
 
 type TrucksListPageProps = {
   initialTrucks: Truck[];
+  initialError?: string;
 };
 
-export function TrucksListPage({ initialTrucks }: TrucksListPageProps) {
+export function TrucksListPage({
+  initialTrucks,
+  initialError,
+}: TrucksListPageProps) {
   const [trucks] = useState<Truck[]>(initialTrucks);
   const [selected, setSelected] = useState<Truck | null>(null);
   const { setCrumbs } = useBreadcrumb();
@@ -36,7 +40,12 @@ export function TrucksListPage({ initialTrucks }: TrucksListPageProps) {
           </p>
         </div>
 
-        {trucks.length === 0 ? (
+        {initialError ? (
+          <RemoteDataState
+            title="Could not load trucks"
+            description={initialError}
+          />
+        ) : trucks.length === 0 ? (
           <RemoteDataState
             title="No trucks found"
             description="The backend returned an empty truck list."
