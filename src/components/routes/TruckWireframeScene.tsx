@@ -142,13 +142,22 @@ interface DimensionsProps {
 
 interface TruckWireframeSceneProps {
   visualization: TruckVisualization;
+  hoveredPalletId?: string | null;
+  onHoverPallet?: (id: string | null) => void;
 }
 
 export function TruckWireframeScene({
   visualization,
+  hoveredPalletId = null,
+  onHoverPallet,
 }: TruckWireframeSceneProps) {
   return (
-    <Canvas gl={{ antialias: true, alpha: false }} dpr={[1, 2]} shadows={false}>
+    <Canvas
+      gl={{ antialias: true, alpha: false }}
+      dpr={[1, 2]}
+      shadows={false}
+      onPointerMissed={() => onHoverPallet?.(null)}
+    >
       <color attach="background" args={[COLOR.bg]} />
       <fog attach="fog" args={[COLOR.fog, 14, 32]} />
       <hemisphereLight args={["#bce7ff", "#0a0f14", 0.55]} />
@@ -157,7 +166,11 @@ export function TruckWireframeScene({
 
       <AdaptiveCamera dimensions={visualization.truck_dims} />
       <YardFloor />
-      <Stage visualization={visualization} />
+      <Stage
+        visualization={visualization}
+        hoveredPalletId={hoveredPalletId}
+        onHoverPallet={onHoverPallet}
+      />
 
       <OrbitControls
         makeDefault
@@ -199,7 +212,15 @@ function AdaptiveCamera({ dimensions }: DimensionsProps) {
 // Stage — root truck group, applies idle bob + 3/4 view rotation.
 // =============================================================================
 
-function Stage({ visualization }: { visualization: TruckVisualization }) {
+function Stage({
+  visualization,
+  hoveredPalletId,
+  onHoverPallet,
+}: {
+  visualization: TruckVisualization;
+  hoveredPalletId: string | null;
+  onHoverPallet?: (id: string | null) => void;
+}) {
   const groupRef = useRef<Group>(null);
 
   useFrame(({ clock }) => {
@@ -224,6 +245,8 @@ function Stage({ visualization }: { visualization: TruckVisualization }) {
         <Pallets
           pallets={visualization.pallets}
           truck={visualization.truck_dims}
+          hoveredPalletId={hoveredPalletId}
+          onHoverPallet={onHoverPallet}
         />
       </group>
       <WheelSet dimensions={visualization.truck_dims} />
@@ -734,13 +757,26 @@ function Cabin({ dimensions }: DimensionsProps) {
 interface PalletsProps {
   pallets: VizPallet[];
   truck: DimensionsCm;
+  hoveredPalletId: string | null;
+  onHoverPallet?: (id: string | null) => void;
 }
 
-function Pallets({ pallets, truck }: PalletsProps) {
+function Pallets({
+  pallets,
+  truck,
+  hoveredPalletId,
+  onHoverPallet,
+}: PalletsProps) {
   return (
     <group>
       {pallets.map((pallet) => (
-        <Pallet key={pallet.pallet_id} pallet={pallet} truck={truck} />
+        <Pallet
+          key={pallet.pallet_id}
+          pallet={pallet}
+          truck={truck}
+          isHovered={hoveredPalletId === pallet.pallet_id}
+          onHover={onHoverPallet}
+        />
       ))}
     </group>
   );
@@ -749,9 +785,11 @@ function Pallets({ pallets, truck }: PalletsProps) {
 interface PalletProps {
   pallet: VizPallet;
   truck: DimensionsCm;
+  isHovered: boolean;
+  onHover?: (id: string | null) => void;
 }
 
-function Pallet({ pallet, truck }: PalletProps) {
+function Pallet({ pallet, truck, isHovered, onHover }: PalletProps) {
   const totalHeight = safe(pallet.dims.height_cm, 1);
   const baseHeight = Math.min(SCENE.palletBaseHeightCm, totalHeight);
   const stackHeight = Math.max(0, totalHeight - baseHeight);
@@ -810,8 +848,29 @@ function Pallet({ pallet, truck }: PalletProps) {
     });
   }, [isReturn, stackHeight, stackHeightUnit, stackLength, stackWidth]);
 
+  // Hover-driven look. depthWrite=false on the transparent fills avoids the
+  // alpha-sort flicker between overlapping pallets (a pallet behind another
+  // would otherwise sometimes "pop" to the front).
+  const fillOpacity = isReturn
+    ? isHovered
+      ? 0.18
+      : 0.05
+    : isHovered
+      ? 0.32
+      : 0.10;
+  const edgeWidth = isHovered ? 2.0 : 1.3;
+
   return (
-    <group>
+    <group
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        onHover?.(pallet.pallet_id);
+      }}
+      onPointerOut={(e) => {
+        e.stopPropagation();
+        onHover?.(null);
+      }}
+    >
       <group position={baseCenter}>
         <mesh>
           <boxGeometry args={[baseLength, baseHeightUnit, baseWidth]} />
@@ -819,6 +878,7 @@ function Pallet({ pallet, truck }: PalletProps) {
             transparent
             opacity={COLOR.palletBaseOpacity}
             color={COLOR.palletBase}
+            depthWrite={false}
           />
           <Edges color={COLOR.palletBaseEdge} linewidth={0.9} />
         </mesh>
@@ -830,10 +890,11 @@ function Pallet({ pallet, truck }: PalletProps) {
             <boxGeometry args={[stackLength, stackHeightUnit, stackWidth]} />
             <meshBasicMaterial
               transparent
-              opacity={isReturn ? 0.05 : 0.1}
+              opacity={fillOpacity}
               color={pallet.color}
+              depthWrite={false}
             />
-            <Edges color={pallet.color} linewidth={1.3} />
+            <Edges color={pallet.color} linewidth={edgeWidth} />
           </mesh>
 
           {hatchLines.map((segment, i) => (

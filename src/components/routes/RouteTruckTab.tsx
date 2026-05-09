@@ -1,8 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { IconBoxSeam, IconCube3dSphere, IconRulerMeasure } from "@tabler/icons-react";
+import { useState } from "react";
+import { IconBoxSeam, IconCube3dSphere } from "@tabler/icons-react";
 
+import { cn } from "@/lib/utils";
 import type { TruckVisualization, VizPallet } from "./types";
 
 // React-three-fiber relies on `window` and a real WebGL context, so it must
@@ -29,14 +31,26 @@ export function RouteTruckTab({
   capacityPallets,
 }: RouteTruckTabProps) {
   const used = visualization.pallets.length;
-  const utilization = capacityPallets > 0
-    ? Math.round((used / capacityPallets) * 100)
-    : 0;
+  const utilization =
+    capacityPallets > 0 ? Math.round((used / capacityPallets) * 100) : 0;
+
+  // Hover state is shared between the 3D scene and the sidebar list so a
+  // pointer hovering either side highlights the matching pallet on both.
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   return (
     <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-5">
-      <div className="relative aspect-[16/10] min-h-[360px] overflow-hidden rounded-lg border border-border bg-canvas">
-        <TruckWireframeScene visualization={visualization} />
+      <div
+        className={cn(
+          "relative aspect-[16/10] min-h-[360px] overflow-hidden rounded-lg border border-border bg-canvas",
+          hoveredId ? "cursor-pointer" : "cursor-default",
+        )}
+      >
+        <TruckWireframeScene
+          visualization={visualization}
+          hoveredPalletId={hoveredId}
+          onHoverPallet={setHoveredId}
+        />
       </div>
 
       <aside className="flex flex-col gap-3" aria-label="Truck load summary">
@@ -48,23 +62,17 @@ export function RouteTruckTab({
               Icon: IconCube3dSphere,
             },
             {
-              label: "Length",
-              value: `${visualization.truck_dims.length_cm} cm`,
-              Icon: IconRulerMeasure,
-            },
-            {
-              label: "Width",
-              value: `${visualization.truck_dims.width_cm} cm`,
-              Icon: IconRulerMeasure,
-            },
-            {
               label: "Load",
               value: `${utilization}%`,
               Icon: IconBoxSeam,
             },
           ]}
         />
-        <PalletList pallets={visualization.pallets} />
+        <PalletList
+          pallets={visualization.pallets}
+          hoveredId={hoveredId}
+          onHover={setHoveredId}
+        />
       </aside>
     </div>
   );
@@ -97,7 +105,13 @@ function StatGrid({ stats }: { stats: Stat[] }) {
   );
 }
 
-function PalletList({ pallets }: { pallets: VizPallet[] }) {
+type PalletListProps = {
+  pallets: VizPallet[];
+  hoveredId: string | null;
+  onHover: (id: string | null) => void;
+};
+
+function PalletList({ pallets, hoveredId, onHover }: PalletListProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
       <div className="flex items-center justify-between">
@@ -109,29 +123,41 @@ function PalletList({ pallets }: { pallets: VizPallet[] }) {
         </span>
       </div>
       <ol className="flex flex-col gap-1.5 overflow-y-auto pr-1">
-        {pallets.map((pallet) => (
-          <li
-            key={pallet.pallet_id}
-            className="flex items-start gap-2.5 rounded-md border border-border bg-surface-1 px-2.5 py-2"
-          >
-            <span
-              aria-hidden
-              className="mt-1 size-2.5 shrink-0 rounded-full"
-              style={{
-                backgroundColor: pallet.color,
-                boxShadow: `0 0 12px ${pallet.color}`,
-              }}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-medium text-ink">
-                {pallet.label}
+        {pallets.map((pallet) => {
+          const active = hoveredId === pallet.pallet_id;
+          return (
+            <li
+              key={pallet.pallet_id}
+              onMouseEnter={() => onHover(pallet.pallet_id)}
+              onMouseLeave={() => onHover(null)}
+              className={cn(
+                "flex items-start gap-2.5 rounded-md border px-2.5 py-2 transition-colors cursor-pointer",
+                active
+                  ? "border-white/30 bg-surface-3"
+                  : "border-border bg-surface-1 hover:border-white/15",
+              )}
+            >
+              <span
+                aria-hidden
+                className="mt-1 size-2.5 shrink-0 rounded-full"
+                style={{
+                  backgroundColor: pallet.color,
+                  boxShadow: active
+                    ? `0 0 18px ${pallet.color}`
+                    : `0 0 12px ${pallet.color}`,
+                }}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="text-[13px] font-medium text-ink">
+                  {pallet.label}
+                </div>
+                <div className="truncate text-[12px] text-ink-subtle">
+                  {pallet.products_summary.join(" · ")}
+                </div>
               </div>
-              <div className="truncate text-[12px] text-ink-subtle">
-                {pallet.products_summary.join(" · ")}
-              </div>
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ol>
     </div>
   );
