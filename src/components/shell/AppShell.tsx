@@ -4,6 +4,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { AUTH_FLAG_KEY } from "@/components/auth/LoginForm";
+import { AgentBubble } from "@/components/chat/AgentBubble";
+import { ChatProvider } from "@/components/chat/ChatProvider";
+import { ChatSurfaceProvider } from "@/components/chat/ChatSurfaceProvider";
 
 import { Header } from "./header/Header";
 import { Sidebar } from "./sidebar/Sidebar";
@@ -31,17 +34,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-canvas text-ink">
-      <Header
-        onToggleSidebar={() => setSidebarOpen((o) => !o)}
-        sidebarOpen={sidebarOpen}
-      />
+    <ChatSurfaceProvider>
+      <ChatProvider>
+        <main className="flex h-screen flex-col overflow-hidden bg-canvas text-ink">
+          <Header
+            onToggleSidebar={() => setSidebarOpen((o) => !o)}
+            sidebarOpen={sidebarOpen}
+          />
 
-      <div className="flex min-h-0 flex-1">
-        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+          <div className="flex min-h-0 flex-1">
+            <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        <div className="flex flex-col min-h-0 flex-1">{children}</div>
-      </div>
-    </main>
+            <div className="flex flex-col min-h-0 flex-1">{children}</div>
+          </div>
+
+          <AgentBubble />
+        </main>
+      </ChatProvider>
+    </ChatSurfaceProvider>
   );
 }
