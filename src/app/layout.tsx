@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 import { Geist, JetBrains_Mono } from "next/font/google";
-import { AppShell } from "@/components/shell/AppShell";
-import { BreadcrumbProvider } from "@/components/shell/breadcrumb";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 
@@ -20,16 +18,14 @@ export const metadata: Metadata = {
   description: "Damm/DDI route and load optimization planner",
 };
 
+// Root layout intentionally minimal — the (app) and (auth) route groups own
+// their own chrome. This keeps the login screen free of dashboard layout.
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={cn("dark", geist.variable, jetbrainsMono.variable)}>
-      <body className="min-h-screen antialiased">
-        <BreadcrumbProvider>
-          <AppShell>{children}</AppShell>
-        </BreadcrumbProvider>
-      </body>
+      <body className="min-h-screen antialiased">{children}</body>
     </html>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
+
 import { useBreadcrumb } from "@/components/shell/breadcrumb";
 
 type Props = {

@@ -26,8 +26,8 @@ export function RoutePreviewClient({ route }: Props) {
 
   return (
     <PageLayout>
-      <div className="px-6 md:px-10 pt-8 pb-10 flex flex-col gap-7">
-        <RouteHero route={route} onBack={() => router.push("/")} />
+      <div className="flex h-full min-h-0 flex-col px-6 md:px-10 pt-5 pb-5">
+        <RouteHero route={route} />
       </div>
     </PageLayout>
   );
