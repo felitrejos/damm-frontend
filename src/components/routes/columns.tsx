@@ -13,55 +13,59 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// `lat`/`lng` mirror backend `Warehouse` (damm-backend/models/catalog.py:9)
-// — used as the route depot in the map view.
-export const schema = z.object({
+// Inspired by damm-backend TransportSummary: route_code, driver_name, date,
+// stop_count, truck_type. `centerId` scopes the route to a specific warehouse
+// (Center) — frontend addition.
+export const routeSchema = z.object({
   id: z.number(),
-  center: z.string(),
-  location: z.string(),
-  routes: z.number(),
-  admin: z.string(),
-  lat: z.number().optional(),
-  lng: z.number().optional(),
+  code: z.string(),
+  driver_name: z.string(),
+  truck_code: z.string(),
+  stops: z.number(),
+  date: z.string(), // ISO YYYY-MM-DD
+  centerId: z.number(),
 });
 
-export type Center = z.infer<typeof schema>;
+export type Route = z.infer<typeof routeSchema>;
 
-export const centerColumns: ColumnDef<Center>[] = [
+export const routeColumns: ColumnDef<Route>[] = [
   {
-    accessorKey: "center",
-    header: "Center",
-    size: 300,
-    cell: ({ row }) => (
-      <div className="font-medium">{row.original.center}</div>
-    ),
-  },
-  {
-    accessorKey: "location",
-    header: "Location",
-    size: 180,
-    filterFn: (row, columnId, filterValue) => {
-      const arr = filterValue as string[] | undefined;
-      if (!arr || arr.length === 0) return true;
-      return arr.includes(row.getValue(columnId) as string);
-    },
-    cell: ({ row }) => (
-      <div className="text-muted-foreground">{row.original.location}</div>
-    ),
-  },
-  {
-    accessorKey: "routes",
-    header: "Routes",
+    accessorKey: "code",
+    header: "Route",
     size: 140,
+    cell: ({ row }) => <div className="font-medium">{row.original.code}</div>,
+  },
+  {
+    accessorKey: "driver_name",
+    header: "Driver",
+    size: 200,
+    cell: ({ row }) => <div>{row.original.driver_name}</div>,
+  },
+  {
+    accessorKey: "truck_code",
+    header: "Truck",
+    size: 120,
     cell: ({ row }) => (
-      <div className="tabular-nums">{row.original.routes}</div>
+      <div className="text-muted-foreground">{row.original.truck_code}</div>
     ),
   },
   {
-    accessorKey: "admin",
-    header: "Admin",
-    size: 320,
-    cell: ({ row }) => <div>{row.original.admin}</div>,
+    accessorKey: "stops",
+    header: "Stops",
+    size: 90,
+    cell: ({ row }) => (
+      <div className="tabular-nums">{row.original.stops}</div>
+    ),
+  },
+  {
+    accessorKey: "date",
+    header: "Date",
+    size: 130,
+    cell: ({ row }) => (
+      <div className="text-muted-foreground tabular-nums">
+        {row.original.date}
+      </div>
+    ),
   },
   {
     id: "actions",

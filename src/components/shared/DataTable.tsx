@@ -34,13 +34,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -76,7 +69,7 @@ type Props<T> = {
 };
 
 export function DataTable<T>({
-  data: initialData,
+  data,
   columns,
   getRowId,
   searchColumnId,
@@ -91,7 +84,6 @@ export function DataTable<T>({
   onRowClick,
   initialPageSize = 10,
 }: Props<T>) {
-  const [data] = React.useState(() => initialData);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     [],
   );
@@ -184,16 +176,20 @@ export function DataTable<T>({
                   ) : null}
                   <IconChevronDown />
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuContent
+                  align="end"
+                  className="max-h-80 w-64 overflow-y-auto"
+                >
                   {uniqueFilterValues.map((value) => (
                     <DropdownMenuCheckboxItem
                       key={value}
+                      className="min-h-8 text-sm"
                       checked={selectedFilterValues.includes(value)}
                       onCheckedChange={(checked) =>
                         toggleFilterValue(value, !!checked)
                       }
                     >
-                      {value}
+                      <span className="truncate">{value}</span>
                     </DropdownMenuCheckboxItem>
                   ))}
                 </DropdownMenuContent>
@@ -209,7 +205,12 @@ export function DataTable<T>({
         </div>
       ) : null}
       <div className="overflow-hidden rounded-lg border bg-card">
-        <Table>
+        <Table className="table-fixed">
+          <colgroup>
+            {table.getVisibleLeafColumns().map((column) => (
+              <col key={column.id} style={{ width: column.getSize() }} />
+            ))}
+          </colgroup>
           <TableHeader className="bg-muted">
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
@@ -238,10 +239,10 @@ export function DataTable<T>({
                   key={row.id}
                   data-state={row.id === selectedRowId ? "selected" : undefined}
                   onClick={() => onRowClick?.(row.original)}
-                  className={onRowClick ? "cursor-pointer" : undefined}
+                  className={onRowClick ? "h-[53px] cursor-pointer" : "h-[53px]"}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className="px-4">
+                    <TableCell key={cell.id} className="px-4 py-2 align-middle">
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext(),
@@ -265,28 +266,6 @@ export function DataTable<T>({
       </div>
       <div className="flex items-center justify-between px-2">
         <div className="flex w-full items-center gap-8 lg:w-fit lg:ml-auto">
-          <div className="hidden items-center gap-2 lg:flex">
-            <Label htmlFor="rows-per-page" className="text-sm font-medium">
-              Rows per page
-            </Label>
-            <Select
-              value={`${table.getState().pagination.pageSize}`}
-              onValueChange={(value) => table.setPageSize(Number(value))}
-            >
-              <SelectTrigger size="sm" className="w-20" id="rows-per-page">
-                <SelectValue
-                  placeholder={table.getState().pagination.pageSize}
-                />
-              </SelectTrigger>
-              <SelectContent side="top">
-                {[10, 20, 30, 40, 50].map((pageSize) => (
-                  <SelectItem key={pageSize} value={`${pageSize}`}>
-                    {pageSize}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           <div className="flex w-fit items-center justify-center text-sm font-medium">
             Page {table.getState().pagination.pageIndex + 1} of{" "}
             {table.getPageCount()}
