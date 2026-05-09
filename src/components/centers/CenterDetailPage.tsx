@@ -8,6 +8,7 @@ import { PageLayout } from "@/components/shell/PageLayout";
 import { useBreadcrumb } from "@/components/shell/breadcrumb";
 import { AddRouteModal } from "@/components/routes/AddRouteModal";
 import { routeColumns, type Route } from "@/components/routes/columns";
+import { RouteHero } from "@/components/routes/RouteHero";
 import { sampleRoutes } from "@/components/routes/sample-data";
 
 import type { Center } from "./columns";
@@ -31,11 +32,7 @@ export function CenterDetailPage({ center }: Props) {
   useEffect(() => {
     setCrumbs([
       { label: "Centers", onClick: () => router.push("/") },
-      { label: center.center },
-      {
-        label: "Routes",
-        onClick: selectedRoute ? () => setSelectedRoute(null) : undefined,
-      },
+      { label: center.center, onClick: () => setSelectedRoute(null) },
       ...(selectedRoute ? [{ label: selectedRoute.code }] : []),
     ]);
     return () => setCrumbs([]);
@@ -44,28 +41,35 @@ export function CenterDetailPage({ center }: Props) {
   return (
     <PageLayout>
       <div className="px-6 md:px-10 pt-8 pb-10 flex flex-col gap-7">
-        <div>
-          <h2 className="headline text-ink">{center.center}</h2>
-          <p className="body-lg text-ink-muted mt-2">
-            Routes dispatched from this center. Add a new one or open an
-            existing route to inspect its plan.
-          </p>
-        </div>
+        {selectedRoute ? (
+          <RouteHero
+            route={selectedRoute}
+            onBack={() => setSelectedRoute(null)}
+          />
+        ) : (
+          <>
+            <div>
+              <h2 className="headline text-ink">{center.center}</h2>
+              <p className="body-lg text-ink-muted mt-2">
+                Routes dispatched from this center. Add a new one or open an
+                existing route to inspect its plan.
+              </p>
+            </div>
 
-        <DataTable
-          data={routes}
-          columns={routeColumns}
-          getRowId={(row) => row.id.toString()}
-          searchColumnId="code"
-          searchPlaceholder="Search routes..."
-          searchAriaLabel="Search routes"
-          addButtonLabel="Add Route"
-          onAdd={() => setAddRouteOpen(true)}
-          selectedRowId={selectedRoute?.id.toString() ?? null}
-          onRowClick={(r) =>
-            setSelectedRoute((curr) => (curr?.id === r.id ? null : r))
-          }
-        />
+            <DataTable
+              data={routes}
+              columns={routeColumns}
+              getRowId={(row) => row.id.toString()}
+              searchColumnId="code"
+              searchPlaceholder="Search routes..."
+              searchAriaLabel="Search routes"
+              addButtonLabel="Add Route"
+              onAdd={() => setAddRouteOpen(true)}
+              selectedRowId={null}
+              onRowClick={(r) => setSelectedRoute(r)}
+            />
+          </>
+        )}
       </div>
 
       <AddRouteModal
