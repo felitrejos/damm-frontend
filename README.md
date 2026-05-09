@@ -1,11 +1,13 @@
-# SmartTruck · damm-frontend
+<h1 align="center">SmartTruck · damm-frontend</h1>
 
-![Next.js 15](https://img.shields.io/badge/Next.js-15-000?logo=nextdotjs&logoColor=white)
-![React 19](https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
-![Tailwind v4](https://img.shields.io/badge/Tailwind-v4-38BDF8?logo=tailwindcss&logoColor=white)
-![MapLibre GL](https://img.shields.io/badge/MapLibre%20GL-396CB2?logo=maplibre&logoColor=white)
-![pnpm](https://img.shields.io/badge/pnpm-F69220?logo=pnpm&logoColor=white)
+<p align="center">
+  <img alt="Next.js 15" src="https://img.shields.io/badge/Next.js-15-000?logo=nextdotjs&logoColor=white" />
+  <img alt="React 19" src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" />
+  <img alt="Tailwind v4" src="https://img.shields.io/badge/Tailwind-v4-38BDF8?logo=tailwindcss&logoColor=white" />
+  <img alt="MapLibre GL" src="https://img.shields.io/badge/MapLibre%20GL-396CB2?logo=maplibre&logoColor=white" />
+  <img alt="pnpm" src="https://img.shields.io/badge/pnpm-F69220?logo=pnpm&logoColor=white" />
+</p>
 
 **Damm's delivery-route planner.** Turns a fleet, a list of clients, and their delivery windows into optimized truck routes — driver, vehicle, stop order, pallet layout, and the full timeline for the day. Compares the optimizer's plan against the baseline so dispatchers can see what changes and why before sending a truck out.
 
