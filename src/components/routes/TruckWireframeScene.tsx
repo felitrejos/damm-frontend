@@ -18,6 +18,11 @@ import type {
 
 const CM_TO_SCENE_UNIT = 0.018;
 const PALLET_BASE_HEIGHT_CM = 15;
+// Chassis lift — separates the cargo body from the wheels so the truck
+// doesn't appear to "swallow" its own wheels. ~85cm matches a real
+// rigid lorry chassis height (wheel top + frame + suspension).
+const CHASSIS_HEIGHT_CM = 85;
+const CHASSIS_LIFT_SCENE = CHASSIS_HEIGHT_CM * CM_TO_SCENE_UNIT;
 const COLOR_GRID_PRIMARY = "#78e7ff";
 const COLOR_GRID_SECONDARY = "#1f3742";
 const COLOR_CARGO_EDGE = "#e9fbff";
@@ -53,7 +58,7 @@ export function TruckWireframeScene({
         maxDistance={18}
         minPolarAngle={Math.PI * 0.2}
         maxPolarAngle={Math.PI * 0.49}
-        target={[0.2, 1.1, 0]}
+        target={[0.2, 1.7, 0]}
       />
     </Canvas>
   );
@@ -90,18 +95,21 @@ function AnimatedTruck({ visualization }: AnimatedTruckProps) {
 
   return (
     <group ref={groupRef} rotation={[0, -0.42, 0]} position={[0, -1.25, 0]}>
-      <CargoBox dimensions={visualization.truck_dims} />
-      <CargoFloor dimensions={visualization.truck_dims} />
-      <CargoRibs dimensions={visualization.truck_dims} />
-      <RearDoor dimensions={visualization.truck_dims} />
-      <ForwardArrow dimensions={visualization.truck_dims} />
-      <Cabin truckDimensions={visualization.truck_dims} />
-      <Pallets
-        pallets={visualization.pallets}
-        truckDimensions={visualization.truck_dims}
-      />
+      {/* Body sits on top of the chassis. Wheels stay at ground level. */}
+      <group position={[0, CHASSIS_LIFT_SCENE, 0]}>
+        <CargoBox dimensions={visualization.truck_dims} />
+        <CargoFloor dimensions={visualization.truck_dims} />
+        <CargoRibs dimensions={visualization.truck_dims} />
+        <RearDoor dimensions={visualization.truck_dims} />
+        <ForwardArrow dimensions={visualization.truck_dims} />
+        <Cabin truckDimensions={visualization.truck_dims} />
+        <Pallets
+          pallets={visualization.pallets}
+          truckDimensions={visualization.truck_dims}
+        />
+        <WheelArches dimensions={visualization.truck_dims} />
+      </group>
       <WheelSet truckDimensions={visualization.truck_dims} />
-      <WheelArches dimensions={visualization.truck_dims} />
     </group>
   );
 }
@@ -501,60 +509,34 @@ interface WheelProps {
 }
 
 function Wheel({ position, radius }: WheelProps) {
-  const tubeRadius = radius * 0.22;
-  const hubRadius = radius * 0.38;
-  const hubDepth = tubeRadius * 1.6;
-  const spokeCount = 5;
-  const spokeInner = hubRadius * 0.55;
-  const spokeOuter = radius - tubeRadius * 0.4;
-
-  const spokes = useMemo(
-    () =>
-      Array.from({ length: spokeCount }, (_, i) => {
-        const angle = (i / spokeCount) * Math.PI * 2;
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
-        return [
-          [cos * spokeInner, sin * spokeInner, 0] as [number, number, number],
-          [cos * spokeOuter, sin * spokeOuter, 0] as [number, number, number],
-        ];
-      }),
-    [spokeInner, spokeOuter]
-  );
+  const tubeRadius = radius * 0.30;
+  const hubRadius = radius * 0.42;
+  const hubDepth = tubeRadius * 1.5;
+  const capRadius = hubRadius * 0.32;
 
   return (
     <group position={position}>
-      {/* Tire body — torus default lies in XY plane, hole-axis along Z (lateral) */}
+      {/* Rubber tire — torus in XY plane, hole-axis along Z (lateral) */}
       <mesh>
-        <torusGeometry args={[radius, tubeRadius, 14, 64]} />
-        <meshBasicMaterial color="#0a1014" />
-        <Edges color="#dff8ff" linewidth={1.4} />
+        <torusGeometry args={[radius, tubeRadius, 14, 56]} />
+        <meshBasicMaterial color="#0a0d10" />
+        <Edges color="#3a4048" linewidth={1.0} />
       </mesh>
 
-      {/* Inner rim ring */}
-      <mesh>
-        <torusGeometry args={[hubRadius, tubeRadius * 0.32, 10, 40]} />
-        <meshBasicMaterial color="#9adfff" transparent opacity={0.85} />
-      </mesh>
-
-      {/* Hub cap (short cylinder along Z gives the wheel depth) */}
+      {/* Steel hub disc — solid disc with depth, both faces visible */}
       <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[hubRadius * 0.45, hubRadius * 0.45, hubDepth, 20]} />
-        <meshBasicMaterial color="#0a1014" />
-        <Edges color={COLOR_GRID_PRIMARY} linewidth={1.0} />
+        <cylinderGeometry args={[hubRadius, hubRadius, hubDepth, 28]} />
+        <meshBasicMaterial color="#1a2028" />
+        <Edges color="#5a6068" linewidth={0.8} />
       </mesh>
 
-      {/* Spokes */}
-      {spokes.map((segment, i) => (
-        <Line
-          key={`spoke-${i}`}
-          points={segment}
-          color={COLOR_GRID_PRIMARY}
-          lineWidth={0.9}
-          transparent
-          opacity={0.78}
+      {/* Centre cap (slightly raised so it reads as a separate part) */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry
+          args={[capRadius, capRadius, hubDepth * 1.08, 18]}
         />
-      ))}
+        <meshBasicMaterial color="#2a3038" />
+      </mesh>
     </group>
   );
 }
