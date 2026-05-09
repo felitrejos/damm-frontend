@@ -1104,16 +1104,22 @@ function MapRoute({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, map]);
 
-  // When coordinates change, update the source data
+  // When coordinates change, update the source data. Always push an update
+  // so callers can clear the line by passing a short/empty array (a
+  // LineString with < 2 points renders as nothing — the previous fix-it
+  // early-return left stale coordinates on the layer after a reset).
   useEffect(() => {
-    if (!isLoaded || !map || coordinates.length < 2) return;
+    if (!isLoaded || !map) return;
 
     const source = map.getSource(sourceId) as MapLibreGL.GeoJSONSource;
     if (source) {
       source.setData({
         type: "Feature",
         properties: {},
-        geometry: { type: "LineString", coordinates },
+        geometry: {
+          type: "LineString",
+          coordinates: coordinates.length >= 2 ? coordinates : [],
+        },
       });
     }
   }, [isLoaded, map, coordinates, sourceId]);

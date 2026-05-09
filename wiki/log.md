@@ -1,5 +1,37 @@
 # SmartTruck Wiki Log
 
+## [2026-05-09] frontend | Route map tab — polyline + stop simulation
+
+Built out the `Mapa` tab on the route detail surface, replacing the
+placeholder. The `Camión` ↔ `Mapa` tabs are now the route-level navigation
+(no per-page back button or truck-type chip), and the page lays out
+tabs-on-top → KPI cards inline with the route code → tab content stretching
+to fill the viewport without scrolling.
+
+- New `RouteMapTab` (mapcn `Map` / `MapRoute` / `MapMarker` per
+  `wiki/frontend/agent-instructions.md`) renders the depot, ordered stops,
+  the OSRM polyline, a progress overlay, and an animated truck marker.
+- The right panel hosts the stop list (sequence pin, customer, ETA, time
+  window, status pill) and a simulation control bar (Play / Pause / Reset,
+  1× / 4× / 16× speeds).
+- Mock stop data comes from `route-stops.ts`. The `RouteStop` shape mirrors
+  `wiki/contracts/data-models.md` → `DeliveryStop` and
+  `damm-backend/models/domain.py:DeliveryStop` (`time_window`,
+  `estimated_arrival`, `service_time_min`). Real data will swap in via the
+  backend `RouteResult.ordered_stops` job result.
+- `Center` (frontend) gained optional `lat`/`lng`, mirroring
+  `damm-backend/models/catalog.py:WarehouseBase`. These act as the route
+  depot in the map view until centers are returned by the backend.
+
+Informed by:
+
+- `wiki/contracts/data-models.md` — `DeliveryStop`, `TimeWindow`,
+  `RouteResult.ordered_stops`, `Center`.
+- `damm-backend/models/domain.py` and `models/catalog.py` — authoritative
+  `DeliveryStop` and `Warehouse` shapes.
+- `wiki/frontend/agent-instructions.md` — mapcn + MapLibre stack guidance
+  noted in the previous `RouteMapTab` placeholder.
+
 ## [2026-05-09] frontend | Route Hero merged with CRUD Center/Route work
 
 Reconciled `feat/route-hero-section` with `feat/crud-centers+routes` after

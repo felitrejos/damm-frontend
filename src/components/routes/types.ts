@@ -33,3 +33,26 @@ export interface TruckVisualization {
   pallets: VizPallet[];
   route_geojson: Record<string, unknown> | null;
 }
+
+// Mirrors `wiki/contracts/data-models.md` -> DeliveryStop and damm-backend
+// `models/domain.py:DeliveryStop`. Times are "HH:MM" 24h strings (matches
+// backend `time` serialization).
+export interface TimeWindow {
+  open: string;
+  close: string;
+}
+
+export interface RouteStop {
+  stop_id: string;
+  sequence: number;
+  customer_id: string;
+  customer_name: string;
+  address: string;
+  city: string;
+  lat: number;
+  lng: number;
+  time_window: TimeWindow | null;
+  estimated_arrival: string | null;
+  service_time_min: number;
+}
+

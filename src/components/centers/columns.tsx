@@ -13,12 +13,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+// `lat`/`lng` mirror backend `Warehouse` (damm-backend/models/catalog.py:9)
+// — used as the route depot in the map view.
 export const schema = z.object({
   id: z.number(),
   center: z.string(),
   location: z.string(),
   routes: z.number(),
   admin: z.string(),
+  lat: z.number().optional(),
+  lng: z.number().optional(),
 });
 
 export type Center = z.infer<typeof schema>;

@@ -34,12 +34,12 @@ export function RouteTruckTab({
     : 0;
 
   return (
-    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-5">
-      <div className="relative aspect-[16/10] min-h-[360px] overflow-hidden rounded-lg border border-border bg-canvas">
+    <div className="flex h-full min-h-0 flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-5">
+      <div className="relative h-full min-h-[360px] overflow-hidden rounded-lg border border-border bg-canvas">
         <TruckWireframeScene visualization={visualization} />
       </div>
 
-      <aside className="flex flex-col gap-3" aria-label="Truck load summary">
+      <aside className="flex min-h-0 flex-col gap-3" aria-label="Truck load summary">
         <StatGrid
           stats={[
             {
@@ -99,15 +99,10 @@ function StatGrid({ stats }: { stats: Stat[] }) {
 
 function PalletList({ pallets }: { pallets: VizPallet[] }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
-          Visible pallets
-        </span>
-        <span className="text-[12px] tabular-nums text-ink-muted">
-          {pallets.length}
-        </span>
-      </div>
+    <div className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
+        Visible pallets
+      </span>
       <ol className="flex flex-col gap-1.5 overflow-y-auto pr-1">
         {pallets.map((pallet) => (
           <li
