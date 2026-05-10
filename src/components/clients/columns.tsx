@@ -3,21 +3,13 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import type { Customer } from "@/lib/api/catalog";
 
-// Frontend-only extension of the backend Customer used by the Add Route
-// picker. `zone` will eventually be backend-derived; until then sample data
-// supplies it.
-export type Client = Customer & { zone: string };
-
 export const clientColumns: ColumnDef<Customer>[] = [
   {
     accessorKey: "name",
     header: "Client",
     size: 300,
     cell: ({ row }) => (
-      <div>
-        <div className="font-medium">{row.original.name}</div>
-        <div className="text-xs text-muted-foreground">{row.original.code}</div>
-      </div>
+      <div className="font-medium">{row.original.name}</div>
     ),
   },
   {

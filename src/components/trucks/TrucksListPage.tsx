@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { useChatSurface } from "@/components/chat/ChatSurfaceProvider";
 import { DataTable } from "@/components/shared/DataTable";
 import { RemoteDataState } from "@/components/shared/RemoteDataState";
 import { PageLayout } from "@/components/shell/PageLayout";
@@ -25,10 +26,22 @@ export function TrucksListPage({
   useEffect(() => {
     setCrumbs([
       { label: "Trucks", onClick: () => setSelected(null) },
-      ...(selected ? [{ label: selected.code }] : []),
+      ...(selected ? [{ label: selected.plate ?? "Unassigned" }] : []),
     ]);
     return () => setCrumbs([]);
   }, [selected, setCrumbs]);
+
+  useChatSurface(
+    useMemo(
+      () => ({
+        surface: "catalog_table",
+        centerId: null,
+        catalog: "trucks",
+        selected: null,
+      }),
+      [],
+    ),
+  );
 
   return (
     <PageLayout>
@@ -54,14 +67,14 @@ export function TrucksListPage({
           <DataTable
             data={trucks}
             columns={truckColumns}
-            getRowId={(row) => row.id.toString()}
-            searchColumnId="code"
+            getRowId={(row) => row.id}
+            searchColumnId="plate"
             searchPlaceholder="Search trucks..."
             searchAriaLabel="Search trucks"
             filterColumnId="truck_type"
             filterLabel="Filter by type"
             filterMobileLabel="Type"
-            selectedRowId={selected?.id.toString() ?? null}
+            selectedRowId={selected?.id ?? null}
             onRowClick={(truck) =>
               setSelected((curr) => (curr?.id === truck.id ? null : truck))
             }

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { useChatSurface } from "@/components/chat/ChatSurfaceProvider";
 import { DataTable } from "@/components/shared/DataTable";
 import { RemoteDataState } from "@/components/shared/RemoteDataState";
 import { PageLayout } from "@/components/shell/PageLayout";
@@ -30,6 +31,18 @@ export function ClientsListPage({
     return () => setCrumbs([]);
   }, [selected, setCrumbs]);
 
+  useChatSurface(
+    useMemo(
+      () => ({
+        surface: "catalog_table",
+        centerId: null,
+        catalog: "clients",
+        selected: null,
+      }),
+      [],
+    ),
+  );
+
   return (
     <PageLayout>
       <div className="px-6 md:px-10 pt-8 pb-10 flex flex-col gap-7">
@@ -54,14 +67,14 @@ export function ClientsListPage({
           <DataTable
             data={clients}
             columns={clientColumns}
-            getRowId={(row) => row.id.toString()}
+            getRowId={(row) => row.id}
             searchColumnId="name"
             searchPlaceholder="Search clients..."
             searchAriaLabel="Search clients"
             filterColumnId="city"
             filterLabel="Filter by city"
             filterMobileLabel="City"
-            selectedRowId={selected?.id.toString() ?? null}
+            selectedRowId={selected?.id ?? null}
             onRowClick={(client) =>
               setSelected((curr) => (curr?.id === client.id ? null : client))
             }

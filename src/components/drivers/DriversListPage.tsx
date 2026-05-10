@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { useChatSurface } from "@/components/chat/ChatSurfaceProvider";
 import { DataTable } from "@/components/shared/DataTable";
 import { RemoteDataState } from "@/components/shared/RemoteDataState";
 import { PageLayout } from "@/components/shell/PageLayout";
@@ -30,6 +31,18 @@ export function DriversListPage({
     return () => setCrumbs([]);
   }, [selected, setCrumbs]);
 
+  useChatSurface(
+    useMemo(
+      () => ({
+        surface: "catalog_table",
+        centerId: null,
+        catalog: "drivers",
+        selected: null,
+      }),
+      [],
+    ),
+  );
+
   return (
     <PageLayout>
       <div className="px-6 md:px-10 pt-8 pb-10 flex flex-col gap-7">
@@ -54,11 +67,11 @@ export function DriversListPage({
           <DataTable
             data={drivers}
             columns={driverColumns}
-            getRowId={(row) => row.id.toString()}
+            getRowId={(row) => row.id}
             searchColumnId="name"
             searchPlaceholder="Search drivers..."
             searchAriaLabel="Search drivers"
-            selectedRowId={selected?.id.toString() ?? null}
+            selectedRowId={selected?.id ?? null}
             onRowClick={(driver) =>
               setSelected((curr) => (curr?.id === driver.id ? null : driver))
             }

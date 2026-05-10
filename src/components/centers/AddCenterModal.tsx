@@ -1,5 +1,7 @@
 "use client";
 
+import * as React from "react";
+import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -15,23 +17,16 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { createWarehouse } from "@/lib/api/warehouses";
 
 const formSchema = z.object({
-  center: z.string().min(1, "Required"),
-  location: z.string().min(1, "Required"),
-  admin: z.string().min(1, "Required"),
+  name: z.string().min(1, "Required"),
+  city: z.string().min(1, "Required"),
+  address: z.string().optional(),
+  postal_code: z.string().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
-
-const ZONES = ["Cataluña", "Levante", "Madrid", "Andalucía", "País Vasco"] as const;
 
 type Props = {
   open: boolean;
@@ -39,21 +34,35 @@ type Props = {
 };
 
 export function AddCenterModal({ open, onOpenChange }: Props) {
+  const router = useRouter();
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: { center: "", location: "", admin: "" },
+    defaultValues: { name: "", city: "", address: "", postal_code: "" },
   });
 
-  const onSubmit = (data: FormData) => {
-    // No endpoint yet — drop the form per the agreed scope.
-    // eslint-disable-next-line no-console
-    console.log("[AddCenterModal] submit (no endpoint):", data);
-    onOpenChange(false);
-    form.reset();
+  const [submitting, setSubmitting] = React.useState(false);
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+
+  const onSubmit = async (data: FormData) => {
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      await createWarehouse(data);
+      onOpenChange(false);
+      form.reset();
+      router.refresh();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Could not create center");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleOpenChange = (next: boolean) => {
-    if (!next) form.reset();
+    if (!next) {
+      form.reset();
+      setErrorMsg(null);
+    }
     onOpenChange(next);
   };
 
@@ -63,7 +72,7 @@ export function AddCenterModal({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>Add center</DialogTitle>
           <DialogDescription>
-            Register a new distribution center.
+            Register a new distribution center (warehouse).
           </DialogDescription>
         </DialogHeader>
 
@@ -73,58 +82,54 @@ export function AddCenterModal({ open, onOpenChange }: Props) {
           className="grid gap-4 py-2"
         >
           <div className="grid gap-1.5">
-            <Label htmlFor="center">Name</Label>
+            <Label htmlFor="name">Name</Label>
             <Input
-              id="center"
-              placeholder="e.g. Barcelona Norte"
-              {...form.register("center")}
+              id="name"
+              placeholder="e.g. DDI Mollet"
+              {...form.register("name")}
             />
-            {form.formState.errors.center ? (
+            {form.formState.errors.name ? (
               <p className="text-[12px] text-destructive">
-                {form.formState.errors.center.message}
+                {form.formState.errors.name.message}
               </p>
             ) : null}
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="location">Zone</Label>
-            <Select
-              value={form.watch("location")}
-              onValueChange={(v) =>
-                form.setValue("location", v ?? "", { shouldValidate: true })
-              }
-            >
-              <SelectTrigger id="location">
-                <SelectValue placeholder="Choose a zone" />
-              </SelectTrigger>
-              <SelectContent>
-                {ZONES.map((z) => (
-                  <SelectItem key={z} value={z}>
-                    {z}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {form.formState.errors.location ? (
+            <Label htmlFor="city">City</Label>
+            <Input
+              id="city"
+              placeholder="e.g. Mollet del Vallès"
+              {...form.register("city")}
+            />
+            {form.formState.errors.city ? (
               <p className="text-[12px] text-destructive">
-                {form.formState.errors.location.message}
+                {form.formState.errors.city.message}
               </p>
             ) : null}
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="admin">Admin</Label>
+            <Label htmlFor="postal_code">Postal code</Label>
             <Input
-              id="admin"
-              placeholder="Admin contact name"
-              {...form.register("admin")}
+              id="postal_code"
+              placeholder="e.g. 08100"
+              {...form.register("postal_code")}
             />
-            {form.formState.errors.admin ? (
-              <p className="text-[12px] text-destructive">
-                {form.formState.errors.admin.message}
-              </p>
-            ) : null}
           </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="address">Address</Label>
+            <Input
+              id="address"
+              placeholder="Street and number"
+              {...form.register("address")}
+            />
+          </div>
+
+          {errorMsg ? (
+            <p className="text-[12px] text-destructive">{errorMsg}</p>
+          ) : null}
         </form>
 
         <DialogFooter>
@@ -132,11 +137,12 @@ export function AddCenterModal({ open, onOpenChange }: Props) {
             type="button"
             variant="outline"
             onClick={() => handleOpenChange(false)}
+            disabled={submitting}
           >
             Cancel
           </Button>
-          <Button type="submit" form="add-center-form">
-            Create
+          <Button type="submit" form="add-center-form" disabled={submitting}>
+            {submitting ? "Creating..." : "Create"}
           </Button>
         </DialogFooter>
       </DialogContent>
