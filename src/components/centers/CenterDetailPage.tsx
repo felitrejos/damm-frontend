@@ -107,27 +107,7 @@ export function CenterDetailPage({ center, routes }: Props) {
             </p>
           </div>
 
-          <div className="flex items-center justify-between gap-3">
-            <Tabs
-              value={filter}
-              onValueChange={(v) => setFilter(v as Filter)}
-            >
-              <TabsList>
-                <TabsTab value="optimized">
-                  Optimized
-                  <span className="ml-1 tabular-nums text-ink-tertiary">
-                    {optimizedCount}
-                  </span>
-                </TabsTab>
-                <TabsTab value="all">
-                  All routes
-                  <span className="ml-1 tabular-nums text-ink-tertiary">
-                    {routes.length}
-                  </span>
-                </TabsTab>
-              </TabsList>
-            </Tabs>
-
+          <div className="flex justify-end">
             <Button
               variant="outline"
               size="sm"
@@ -148,6 +128,27 @@ export function CenterDetailPage({ center, routes }: Props) {
             searchAriaLabel="Search routes"
             addButtonLabel="Add Route"
             onAdd={() => setAddRouteOpen(true)}
+            toolbarTrailing={
+              <Tabs
+                value={filter}
+                onValueChange={(v) => setFilter(v as Filter)}
+              >
+                <TabsList>
+                  <TabsTab value="optimized">
+                    Optimized
+                    <span className="ml-1 tabular-nums text-ink-tertiary">
+                      {optimizedCount}
+                    </span>
+                  </TabsTab>
+                  <TabsTab value="all">
+                    All
+                    <span className="ml-1 tabular-nums text-ink-tertiary">
+                      {routes.length}
+                    </span>
+                  </TabsTab>
+                </TabsList>
+              </Tabs>
+            }
             selectedRowId={null}
             onRowClick={(r) => setSelectedRoute(r)}
           />

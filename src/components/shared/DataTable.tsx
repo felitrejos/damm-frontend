@@ -59,6 +59,10 @@ type Props<T> = {
   addButtonLabel?: string;
   onAdd?: () => void;
 
+  /** Extra slot rendered in the right-hand toolbar cluster, just before the
+   * Add button. Useful for page-specific filter controls (e.g. Tabs). */
+  toolbarTrailing?: React.ReactNode;
+
   /** Row interaction. */
   selectedRowId?: string | null;
   onRowClick?: (row: T) => void;
@@ -78,6 +82,7 @@ export function DataTable<T>({
   filterMobileLabel = "Filter",
   addButtonLabel,
   onAdd,
+  toolbarTrailing,
   selectedRowId,
   onRowClick,
   initialPageSize = 10,
@@ -128,7 +133,12 @@ export function DataTable<T>({
     filterColumn.setFilterValue(next.length ? next : undefined);
   };
 
-  const showToolbar = !!(searchColumnId || filterColumnId || addButtonLabel);
+  const showToolbar = !!(
+    searchColumnId ||
+    filterColumnId ||
+    addButtonLabel ||
+    toolbarTrailing
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -193,6 +203,7 @@ export function DataTable<T>({
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
+            {toolbarTrailing}
             {addButtonLabel ? (
               <Button variant="outline" size="sm" onClick={onAdd}>
                 <IconPlus />
