@@ -46,6 +46,12 @@ NEXT_PUBLIC_API_BASE_URL=http://10.0.0.5:8000 pnpm dev
 
 Default is `http://localhost:8000`. See [`src/lib/api/client.ts`](src/lib/api/client.ts).
 
+The planner assistant (see _Planner agent_ below) needs a Google Generative AI key in `.env`:
+
+```bash
+GOOGLE_GENERATIVE_AI_API_KEY=<your key>
+```
+
 ---
 
 ## Backend wiring
@@ -61,6 +67,21 @@ All reads and writes go through a thin Zod-validated client in [`src/lib/api/`](
 | [`optimize.ts`](src/lib/api/optimize.ts) | `/api/v1/optimize/full/preview` and `/persist` | Generates and saves suggested routes from `AddRouteModal` |
 
 The optimizer runs in **preview mode** when the user clicks _Generate Routes_ — three parallel calls with different parameters give three suggestions in ~20s. _Save selected route_ then calls `/optimize/persist` to commit it as a real transport.
+
+---
+
+## Planner agent
+
+A read-only chat assistant lives in the right-hand panel on every app surface. It's powered by **Gemini 2.5 Flash** via [`@ai-sdk/google`](https://www.npmjs.com/package/@ai-sdk/google), with streaming through Vercel's AI SDK.
+
+What makes it useful is the **surface awareness**: every page publishes its visible state (which center, which route, which catalog, which selected row) into a chat context, and [`src/agents/visible-context.ts`](src/agents/visible-context.ts) turns that into a deterministic JSON snapshot that's injected into the system prompt for each request. The model only answers from what's actually on screen — no invented stops, no hallucinated drivers — and points users at the right UI control when they ask for an action it can't take.
+
+| Piece | Path |
+| --- | --- |
+| System prompt + model config | [`src/agents/planner.ts`](src/agents/planner.ts) |
+| Surface → JSON snapshot builder | [`src/agents/visible-context.ts`](src/agents/visible-context.ts) |
+| Streaming endpoint | [`src/app/api/chat/route.ts`](src/app/api/chat/route.ts) |
+| UI shell (panel, bubbles, input) | [`src/components/chat/`](src/components/chat/) |
 
 ---
 
