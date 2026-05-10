@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   IconBuildingWarehouse,
+  IconClipboardList,
   IconDotsVertical,
   IconLogout,
   IconSteeringWheel,
@@ -26,6 +27,7 @@ const items = [
   { href: "/clients", label: "Clients", Icon: IconUsers },
   { href: "/trucks", label: "Trucks", Icon: IconTruck },
   { href: "/drivers", label: "Drivers", Icon: IconSteeringWheel },
+  { href: "/orders", label: "Orders", Icon: IconClipboardList },
 ] as const;
 
 // Mock user — replace with real session data when auth lands.

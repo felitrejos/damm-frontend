@@ -7,7 +7,7 @@ export type SurfaceKey =
   | "catalog_table"
   | "add_route_review";
 
-export type CatalogKind = "clients" | "drivers" | "trucks";
+export type CatalogKind = "clients" | "drivers" | "trucks" | "orders";
 
 // IDs are backend UUID strings.
 export type ChatSelected =

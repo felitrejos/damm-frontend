@@ -139,6 +139,12 @@ async function visibleDataFor(ctx: PlannerChatContext): Promise<{
           },
         };
       }
+      if (ctx.catalog === "orders") {
+        // Orders catalog is not surfaced to the chat agent yet — there's no
+        // listOrders on the chat data-source. Return null so the surface
+        // doesn't fall through to trucks below and lie about its rows.
+        return null;
+      }
       if (ctx.catalog === "drivers") {
         const drivers = await ds.listDrivers();
         return {
