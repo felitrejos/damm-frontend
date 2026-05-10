@@ -12,18 +12,11 @@ import {
   type Driver,
   type Truck,
 } from "@/lib/api/catalog";
-import { fetchJson } from "@/lib/api/client";
 import {
   getTransport,
   listTransports,
 } from "@/lib/api/transports";
 import { listWarehouses, getWarehouse } from "@/lib/api/warehouses";
-import { z } from "zod";
-
-const RawTransport = z.object({
-  id: z.string(),
-  truck_id: z.string().nullable().optional(),
-});
 
 async function safeList<T>(
   loader: () => Promise<T[]>,
@@ -52,27 +45,6 @@ export interface PlannerDataSource {
   getDepotForCenter(centerId: string): Promise<Depot | null>;
 }
 
-async function transportsForWarehouse(centerId: string): Promise<Route[]> {
-  try {
-    const [summaries, trucks, raw] = await Promise.all([
-      listTransports(),
-      listTrucksFromApi(),
-      fetchJson("/api/v1/db/transports?limit=10000", z.array(RawTransport)),
-    ]);
-    const truckIds = new Set(
-      trucks.filter((t) => t.warehouse_id === centerId).map((t) => t.id),
-    );
-    const transportIds = new Set(
-      raw
-        .filter((t) => t.truck_id != null && truckIds.has(t.truck_id))
-        .map((t) => t.id),
-    );
-    return summaries.filter((s) => transportIds.has(s.transport_id));
-  } catch {
-    return [];
-  }
-}
-
 const liveDataSource: PlannerDataSource = {
   async listCenters() {
     return safeList(listWarehouses, "listCenters");
@@ -80,8 +52,11 @@ const liveDataSource: PlannerDataSource = {
   async getCenter(id) {
     return getWarehouse(id);
   },
-  async listRoutesForCenter(centerId) {
-    return transportsForWarehouse(centerId);
+  // Returns all transports — no per-warehouse filter. The seeded dataset has
+  // transports with route/driver but no truck_id, so a truck->warehouse join
+  // hides everything useful. Demo runs single-warehouse so this is honest.
+  async listRoutesForCenter(_centerId) {
+    return safeList(listTransports, "listTransports");
   },
   async getRoute(routeId) {
     const detail = await getTransport(routeId);
