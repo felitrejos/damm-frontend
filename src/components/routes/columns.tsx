@@ -70,6 +70,23 @@ export function buildRouteColumns(
       ),
     },
     {
+      id: "schedule",
+      header: "Start",
+      size: 140,
+      cell: ({ row }) => {
+        const start = row.original.start_time;
+        if (!start) return <div className="text-muted-foreground">—</div>;
+        const dur = row.original.duration_min;
+        const end = dur != null ? addMinutesHHMM(start, dur) : null;
+        return (
+          <div className="tabular-nums text-muted-foreground">
+            {start}
+            {end ? <span className="text-ink-tertiary"> → {end}</span> : null}
+          </div>
+        );
+      },
+    },
+    {
       id: "actions",
       size: 56,
       cell: ({ row }) => (
@@ -108,3 +125,17 @@ export function buildRouteColumns(
 
 // Backwards-compatible export — read-only table without actions.
 export const routeColumns = buildRouteColumns();
+
+// "HH:MM" + minutes → "HH:MM" wrapping at 24h. Used to derive the route's
+// end time from start + duration for the schedule column.
+function addMinutesHHMM(hhmm: string, minutes: number): string | null {
+  const parts = hhmm.split(":");
+  if (parts.length !== 2) return null;
+  const h = Number(parts[0]);
+  const m = Number(parts[1]);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+  const total = (h * 60 + m + minutes + 24 * 60) % (24 * 60);
+  const eh = Math.floor(total / 60);
+  const em = total % 60;
+  return `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+}
