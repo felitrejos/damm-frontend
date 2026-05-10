@@ -12,7 +12,6 @@ import { RouteMapTab } from "./RouteMapTab";
 import { RouteTruckTab } from "./RouteTruckTab";
 import { adaptBackendLoadPlan } from "./backendLoadAdapter";
 import { depotForCenter, transportStopsToRouteStops } from "./route-stops";
-import { buildTruckVisualization } from "./sample-data";
 
 type RouteHeroProps = {
   route: Route;
@@ -50,15 +49,13 @@ export function RouteHero({ route, center }: RouteHeroProps) {
     detail?.truck_type ?? route.truck_type ?? null,
   );
   const capacity = capacityForType(truckType);
-  // Use the persisted LoadPlan when present (transports saved via the
-  // optimizer flow). Fallback to the deterministic mock for legacy/seeded
-  // transports that never had a LoadPlan attached.
-  const visualization = useMemo(() => {
-    if (detail?.load_plan) {
-      return adaptBackendLoadPlan(detail.load_plan);
-    }
-    return buildTruckVisualization(truckType);
-  }, [detail?.load_plan, truckType]);
+  // Backend always returns a load_plan when there are stops to pack — either
+  // the optimizer's exact one (persisted) or one derived from the actual
+  // stop products. Null means a transport with no stops at all.
+  const visualization = useMemo(
+    () => (detail?.load_plan ? adaptBackendLoadPlan(detail.load_plan) : null),
+    [detail?.load_plan],
+  );
 
   const stops = useMemo(
     () => (detail ? transportStopsToRouteStops(detail.stops) : []),
@@ -91,10 +88,20 @@ export function RouteHero({ route, center }: RouteHeroProps) {
         </TabsList>
 
         <TabsPanel value="truck" className="flex min-h-0 flex-1 flex-col">
-          <RouteTruckTab
-            visualization={visualization}
-            capacityPallets={capacity}
-          />
+          {visualization ? (
+            <RouteTruckTab
+              visualization={visualization}
+              capacityPallets={capacity}
+            />
+          ) : (
+            <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border bg-surface-2 p-10 text-center">
+              <p className="max-w-sm text-[13px] text-ink-subtle">
+                {detail
+                  ? "No load data — this transport has no stops to pack."
+                  : "Loading truck plan..."}
+              </p>
+            </div>
+          )}
         </TabsPanel>
 
         <TabsPanel value="map" className="flex min-h-0 flex-1 flex-col">
