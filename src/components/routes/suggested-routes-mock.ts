@@ -6,6 +6,14 @@
 // Self-contained: does NOT import any sample-data file. Embeds a small fixed
 // set of clients/drivers/trucks just for design.
 
+export type SuggestedStopProduct = {
+  material_code: string;
+  description?: string | null;
+  quantity: number;
+  unit: string;
+  category?: string | null;
+};
+
 export type SuggestedStop = {
   stop_id: string;
   sequence: number;
@@ -15,6 +23,10 @@ export type SuggestedStop = {
   lat: number | null;
   lng: number | null;
   zone: string;
+  // Optional — populated by routeResultToSuggested when the suggestion came
+  // from the backend optimizer. Persist forwards it so the saved transport's
+  // delivery_stops carry the per-stop product breakdown.
+  products?: SuggestedStopProduct[];
 };
 
 // Inline shape for the backend LoadPlan we stash on a suggestion so the
