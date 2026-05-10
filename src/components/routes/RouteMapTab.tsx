@@ -460,37 +460,55 @@ async function fetchOsrmRoute(
   if (!r?.geometry?.coordinates || !r.legs) throw new Error("OSRM bad payload");
 
   const coordinates = r.geometry.coordinates as [number, number][];
-  // Each leg's "endCoordIdx" is the polyline index of its destination
-  // waypoint. OSRM concatenates leg geometries in order — so the cumulative
-  // step count gives us the boundary between legs.
-  const legs: LegTiming[] = [];
-  let cumCoords = 0;
-  for (const leg of r.legs as Array<{ duration: number; steps?: Array<{ geometry?: { coordinates?: unknown[] } }> }>) {
-    // overview=full + steps=false means we don't get per-step geometry.
-    // Approximate the leg boundary by distributing coordinates evenly.
-    const start = cumCoords;
-    legs.push({
-      durationMin: leg.duration / 60,
-      startCoordIdx: start,
-      endCoordIdx: start, // refined below
-    });
-  }
-  // Distribute coordinates by cumulative leg duration.
-  const totalDurMin = legs.reduce((a, b) => a + b.durationMin, 0);
-  let acc = 0;
-  legs.forEach((leg, i) => {
-    leg.startCoordIdx = Math.round((acc / totalDurMin) * (coordinates.length - 1));
-    acc += leg.durationMin;
-    leg.endCoordIdx = Math.round((acc / totalDurMin) * (coordinates.length - 1));
-    if (i === legs.length - 1) leg.endCoordIdx = coordinates.length - 1;
+
+  // OSRM returns one snapped waypoint per input lat/lng (start + each stop +
+  // depot return). Each waypoint sits ON the polyline. Locating each
+  // waypoint's nearest polyline index gives us the exact coord at which a
+  // leg ends — far more accurate than the duration-proportional guess we
+  // used before, which left the truck "stopping" at a random midpoint along
+  // the route and then visibly passing through the customer marker after.
+  const osrmWaypoints = (data?.waypoints ?? []) as Array<{
+    location?: [number, number];
+  }>;
+  const waypointIndices = waypoints.map((wp, i) => {
+    const snapped = osrmWaypoints[i]?.location ?? wp;
+    return nearestCoordIndex(coordinates, snapped);
   });
+
+  const rawLegs = r.legs as Array<{ duration: number; distance: number }>;
+  const legs: LegTiming[] = rawLegs.map((leg, i) => ({
+    durationMin: leg.duration / 60,
+    startCoordIdx: waypointIndices[i] ?? 0,
+    endCoordIdx: waypointIndices[i + 1] ?? coordinates.length - 1,
+  }));
 
   return {
     coordinates,
     legs,
     totalDistanceKm: (r.distance ?? 0) / 1000,
-    totalDurationMin: totalDurMin,
+    totalDurationMin: legs.reduce((a, b) => a + b.durationMin, 0),
   };
+}
+
+function nearestCoordIndex(
+  coords: [number, number][],
+  target: [number, number],
+): number {
+  // Squared euclidean distance in lng/lat space — the polyline is dense
+  // enough that the curvature error doesn't matter for a "closest point"
+  // search. Saves a sqrt per iteration over haversine.
+  let best = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < coords.length; i++) {
+    const dx = (coords[i]?.[0] ?? 0) - target[0];
+    const dy = (coords[i]?.[1] ?? 0) - target[1];
+    const d = dx * dx + dy * dy;
+    if (d < bestDist) {
+      bestDist = d;
+      best = i;
+    }
+  }
+  return best;
 }
 
 function buildStraightFallback(waypoints: [number, number][]): OsrmRoute {
