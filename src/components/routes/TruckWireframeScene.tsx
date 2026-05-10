@@ -22,13 +22,15 @@ import {
   type Mesh,
 } from "three";
 import {
-  palletDisplayColor,
-  palletEdgeColor,
-  palletHeightFactor,
+  colorForKind,
+  edgeForKind,
+  heightFactorForKind,
 } from "./palletColor";
 import type {
   DimensionsCm,
+  PalletKind,
   PositionCm,
+  Product,
   TruckVisualization,
   VizPallet,
 } from "./types";
@@ -697,11 +699,111 @@ interface PalletProps {
 
 // Each pallet renders as a wooden base + N stacked layer boxes (one per
 // case-height layer of the load). Layers are full-footprint, separated by a
-// small visible gap so they read as distinct rows. Material + geometry are
-// shared across the layers of one pallet so the hover dim animation only
-// touches one material per pallet.
+// small visible gap so they read as distinct rows. When the pallet mixes
+// barrels with cases, the footprint splits along its length axis: cases on
+// the front half, barrels on the back half. Each partition has its own
+// shape, color, and material set.
 const LAYER_TARGET_CM = 30; // approximate visual height per layer
 const LAYER_GAP_CM = 0.4; // visible seam between layers
+const STACK_GAP_CM = 0.6;
+
+// Mixed pallets split along length using these bounds. Below the floor a
+// partition is too thin to render meaningfully; above the ceiling the other
+// partition collapses. Empirically, a barrel needs at least ~30% of pallet
+// length to look right (one row of 2 fits in ~36 cm).
+const PARTITION_FLOOR = 0.3;
+const PARTITION_CEILING = 0.7;
+
+// Per-unit area weight used to allocate footprint between partitions. Each
+// barrel takes considerably more pallet area than a single case, so the
+// weight ratio biases toward barrels even when case count is higher.
+const UNIT_WEIGHT: Record<string, number> = {
+  BRL: 5,
+  CAJ: 1,
+  UN: 1,
+  PAK: 1,
+};
+
+type Partition = {
+  kind: PalletKind;
+  // Local offset from the pallet's origin along its length axis (cm).
+  offsetXcm: number;
+  lengthCm: number;
+  widthCm: number;
+  products: Product[];
+};
+
+function partitionPallet(
+  products: Product[],
+  totalLengthCm: number,
+  totalWidthCm: number,
+  fallbackKind: PalletKind,
+): Partition[] {
+  const barrels = products.filter((p) => p.unit === "BRL");
+  const cases = products.filter((p) => p.unit !== "BRL");
+
+  if (products.length === 0) {
+    return [
+      {
+        kind: fallbackKind,
+        offsetXcm: 0,
+        lengthCm: totalLengthCm,
+        widthCm: totalWidthCm,
+        products: [],
+      },
+    ];
+  }
+  if (barrels.length === 0) {
+    return [
+      {
+        kind: fallbackKind === "barrel" ? "case-bottle" : fallbackKind,
+        offsetXcm: 0,
+        lengthCm: totalLengthCm,
+        widthCm: totalWidthCm,
+        products: cases,
+      },
+    ];
+  }
+  if (cases.length === 0) {
+    return [
+      {
+        kind: "barrel",
+        offsetXcm: 0,
+        lengthCm: totalLengthCm,
+        widthCm: totalWidthCm,
+        products: barrels,
+      },
+    ];
+  }
+
+  const weight = (group: Product[]) =>
+    group.reduce((sum, p) => sum + p.cases * (UNIT_WEIGHT[p.unit] ?? 1), 0);
+  const total = weight(barrels) + weight(cases);
+  let barrelShare = total > 0 ? weight(barrels) / total : 0.5;
+  barrelShare = Math.max(PARTITION_FLOOR, Math.min(PARTITION_CEILING, barrelShare));
+  const barrelLen = totalLengthCm * barrelShare;
+  const caseLen = totalLengthCm - barrelLen;
+
+  // Cases on the front (offset 0), barrels behind. Case partition's kind
+  // mirrors the dominant case-style (bottle vs can) — bottles by default.
+  const caseKind: PalletKind = fallbackKind === "case-can" ? "case-can" : "case-bottle";
+  return [
+    {
+      kind: caseKind,
+      offsetXcm: 0,
+      lengthCm: caseLen,
+      widthCm: totalWidthCm,
+      products: cases,
+    },
+    {
+      kind: "barrel",
+      offsetXcm: caseLen,
+      lengthCm: barrelLen,
+      widthCm: totalWidthCm,
+      products: barrels,
+    },
+  ];
+}
 
 function Pallet({
   pallet,
@@ -713,13 +815,8 @@ function Pallet({
 }: PalletProps) {
   const totalHeightRaw = safe(pallet.dims.height_cm, 1);
   const baseHeight = Math.min(SCENE.palletBaseHeightCm, totalHeightRaw);
-  // Apply the per-kind visual height factor (cans render at ~80% of bottles
-  // for the same data height). Empties stay at base only — factor doesn't
-  // touch them.
   const stackHeightRaw = Math.max(0, totalHeightRaw - baseHeight);
-  const heightFactor = palletHeightFactor(pallet);
-  const stackHeight = stackHeightRaw * heightFactor;
-  const totalHeight = baseHeight + stackHeight;
+  const totalHeight = baseHeight + stackHeightRaw;
 
   const baseDims: DimensionsCm = {
     length_cm: pallet.dims.length_cm,
@@ -727,10 +824,6 @@ function Pallet({
     height_cm: baseHeight,
   };
   const [baseLength, baseHeightUnit, baseWidth] = toSceneSize(baseDims);
-
-  // Tiny gap between base top and the bottom layer so coplanar edges don't
-  // z-fight.
-  const STACK_GAP_CM = 0.6;
 
   const baseCenter = toScenePos(
     {
@@ -741,150 +834,26 @@ function Pallet({
     truck,
   );
 
-  const displayColor = palletDisplayColor(pallet);
-  const edgeColor = palletEdgeColor(pallet);
   const isEmpty = pallet.is_empty || pallet.products.length === 0;
-  const isBarrel = pallet.kind === "barrel";
 
-  // Barrel plan: 2×2 grid of big upright kegs filling the pallet footprint.
-  // Cylinders run the full stackHeight — no per-layer subdivision.
-  const barrelPlan = useMemo(() => {
-    if (!isBarrel || isEmpty || stackHeight === 0) return null;
-    const cols = 2; // along length
-    const rows = 2; // along width
-    const cellL = pallet.dims.length_cm / cols;
-    const cellW = pallet.dims.width_cm / rows;
-    const diameterCm = Math.min(cellL, cellW) * 0.92;
-    const offsetsCm: Array<[number, number]> = [];
-    for (let i = 0; i < cols; i++) {
-      for (let j = 0; j < rows; j++) {
-        offsetsCm.push([
-          (i + 0.5) * cellL - pallet.dims.length_cm / 2,
-          (j + 0.5) * cellW - pallet.dims.width_cm / 2,
-        ]);
-      }
-    }
-    return { offsetsCm, diameterCm, heightCm: stackHeight };
-  }, [
-    isBarrel,
-    isEmpty,
-    stackHeight,
-    pallet.dims.length_cm,
-    pallet.dims.width_cm,
-  ]);
-
-  // Layer plan: N equal-height boxes filling stackHeight, each shorter than
-  // its slot by LAYER_GAP_CM so a dark seam shows between them. Barrel
-  // pallets skip this entirely — they render as cylinders instead.
-  const layerPlan = useMemo(() => {
-    if (isEmpty || stackHeight === 0 || isBarrel) return null;
-    const numLayers = Math.max(1, Math.round(stackHeight / LAYER_TARGET_CM));
-    const slotHeight = stackHeight / numLayers;
-    const meshHeight = Math.max(1, slotHeight - LAYER_GAP_CM);
-    const centersZcm: number[] = [];
-    for (let i = 0; i < numLayers; i++) {
-      centersZcm.push(i * slotHeight + meshHeight / 2);
-    }
-    return { numLayers, slotHeight, meshHeight, centersZcm };
-  }, [isEmpty, stackHeight, isBarrel]);
-
-  // Shared geometry per pallet — either a full-footprint box (one per layer)
-  // or a single cylinder reused by every barrel position.
-  const layerGeo = useMemo(() => {
-    if (!layerPlan) return null;
-    return new BoxGeometry(
-      pallet.dims.length_cm * CM_TO_SCENE,
-      layerPlan.meshHeight * CM_TO_SCENE,
-      pallet.dims.width_cm * CM_TO_SCENE,
-    );
-  }, [pallet.dims.length_cm, pallet.dims.width_cm, layerPlan]);
-  const layerEdgesGeo = useMemo(
-    () => (layerGeo ? new EdgesGeometry(layerGeo) : null),
-    [layerGeo],
-  );
-
-  const barrelGeo = useMemo(() => {
-    if (!barrelPlan) return null;
-    const radius = (barrelPlan.diameterCm / 2) * CM_TO_SCENE;
-    const height = barrelPlan.heightCm * CM_TO_SCENE;
-    return new CylinderGeometry(radius, radius, height, 24, 1);
-  }, [barrelPlan]);
-  const barrelEdgesGeo = useMemo(
-    () => (barrelGeo ? new EdgesGeometry(barrelGeo) : null),
-    [barrelGeo],
-  );
-
-  // Shared materials per pallet — animation only touches these two.
-  const layerFillMat = useMemo(
+  const partitions = useMemo(
     () =>
-      new MeshBasicMaterial({
-        color: displayColor,
-        transparent: true,
-        opacity: 1,
-        depthWrite: false,
-      }),
-    [displayColor],
-  );
-  const layerEdgeMat = useMemo(
-    () =>
-      new LineBasicMaterial({
-        color: edgeColor,
-        transparent: true,
-        opacity: 1,
-      }),
-    [edgeColor],
-  );
-
-  useEffect(
-    () => () => {
-      layerGeo?.dispose();
-      layerEdgesGeo?.dispose();
-      barrelGeo?.dispose();
-      barrelEdgesGeo?.dispose();
-      layerFillMat.dispose();
-      layerEdgeMat.dispose();
-    },
+      isEmpty
+        ? []
+        : partitionPallet(
+            pallet.products,
+            pallet.dims.length_cm,
+            pallet.dims.width_cm,
+            pallet.kind,
+          ),
     [
-      layerGeo,
-      layerEdgesGeo,
-      barrelGeo,
-      barrelEdgesGeo,
-      layerFillMat,
-      layerEdgeMat,
+      isEmpty,
+      pallet.products,
+      pallet.dims.length_cm,
+      pallet.dims.width_cm,
+      pallet.kind,
     ],
   );
-
-  // Pre-compute world-space centres for every layer.
-  const layerCenters = useMemo<Array<[number, number, number]>>(() => {
-    if (!layerPlan) return [];
-    return layerPlan.centersZcm.map((zCm) =>
-      toScenePos(
-        {
-          x: pallet.position.x + pallet.dims.length_cm / 2,
-          y: pallet.position.y + pallet.dims.width_cm / 2,
-          z: pallet.position.z + baseHeight + STACK_GAP_CM + zCm,
-        },
-        truck,
-      ),
-    );
-  }, [pallet, truck, baseHeight, layerPlan]);
-
-  // Pre-compute world-space centres for every barrel.
-  const barrelCenters = useMemo<Array<[number, number, number]>>(() => {
-    if (!barrelPlan) return [];
-    const cz =
-      pallet.position.z + baseHeight + STACK_GAP_CM + barrelPlan.heightCm / 2;
-    return barrelPlan.offsetsCm.map(([dxCm, dyCm]) =>
-      toScenePos(
-        {
-          x: pallet.position.x + pallet.dims.length_cm / 2 + dxCm,
-          y: pallet.position.y + pallet.dims.width_cm / 2 + dyCm,
-          z: cz,
-        },
-        truck,
-      ),
-    );
-  }, [pallet, truck, baseHeight, barrelPlan]);
 
   // All pallets stay fully opaque except when something else is hovered.
   const targetFillOpacity = dimmed ? 0.06 : 1;
@@ -897,10 +866,6 @@ function Pallet({
 
   useFrame((_, delta) => {
     const lambda = 9;
-    // Snap to fully opaque when this pallet is the hovered one (or nothing is
-    // hovered). Only animate the dim-out so a newly-selected pallet never
-    // shows a 0.5s transparency catch-up if it was mid-dim from a previous
-    // hover.
     const snapOpaque = !dimmed;
 
     const m1 = baseMatRef.current;
@@ -908,31 +873,8 @@ function Pallet({
       m1.opacity = snapOpaque
         ? 1
         : MathUtils.damp(m1.opacity, targetFillOpacity, lambda, delta);
-      // Write depth only when fully opaque so dimmed pallets don't depth-block
-      // the hovered pallet behind them, while opaque pallets still occlude
-      // each other's edges correctly (no see-through outlines).
       m1.depthWrite = m1.opacity > 0.95;
     }
-    layerFillMat.opacity = snapOpaque
-      ? 1
-      : MathUtils.damp(
-          layerFillMat.opacity,
-          targetFillOpacity,
-          lambda,
-          delta,
-        );
-    layerFillMat.depthWrite = layerFillMat.opacity > 0.95;
-    layerEdgeMat.opacity = snapOpaque
-      ? 1
-      : MathUtils.damp(
-          layerEdgeMat.opacity,
-          targetEdgeOpacity,
-          lambda,
-          delta,
-        );
-    // Edge lines never claim depth — bodies own occlusion. Stops back-pallet
-    // outlines from depth-fighting with front-pallet bodies.
-    layerEdgeMat.depthWrite = false;
 
     const baseEdgeMat = singleMaterial(baseEdgesRef.current);
     if (baseEdgeMat) {
@@ -953,9 +895,9 @@ function Pallet({
   });
 
   // Single invisible hitbox per pallet wrapping the whole base + stack volume.
-  // Pointer events live ONLY on this mesh; layer/base meshes have raycast
+  // Pointer events live ONLY on this mesh; partition meshes have raycast
   // disabled below so the hover state can't flicker as the cursor crosses
-  // the gaps between layer boxes.
+  // gaps between layer boxes / cylinders.
   const hitboxCenter = toScenePos(
     {
       x: pallet.position.x + pallet.dims.length_cm / 2,
@@ -969,12 +911,9 @@ function Pallet({
     width_cm: pallet.dims.width_cm,
     height_cm: Math.max(totalHeight, baseHeight + STACK_GAP_CM),
   });
-  const noRaycast = () => undefined;
 
   return (
     <group>
-      {/* Invisible hitbox — only raycast target for hover. Sits at
-          colorWrite=false so it has zero visual presence. */}
       {!isEmpty && (
         <mesh
           position={hitboxCenter}
@@ -1002,7 +941,7 @@ function Pallet({
       )}
 
       <group position={baseCenter}>
-        <mesh renderOrder={isFocused ? 10 : 0} raycast={noRaycast}>
+        <mesh renderOrder={isFocused ? 10 : 0} raycast={NO_RAYCAST}>
           <boxGeometry args={[baseLength, baseHeightUnit, baseWidth]} />
           <meshBasicMaterial
             ref={baseMatRef}
@@ -1019,21 +958,214 @@ function Pallet({
         </mesh>
       </group>
 
+      {partitions.map((partition, i) => (
+        <PalletPartition
+          key={`${partition.kind}-${i}`}
+          pallet={pallet}
+          truck={truck}
+          partition={partition}
+          baseHeight={baseHeight}
+          stackHeightRaw={stackHeightRaw}
+          isFocused={isFocused}
+          dimmed={dimmed}
+        />
+      ))}
+    </group>
+  );
+}
+
+// Shared raycast-off function so all decorative meshes drop pointer events
+// without allocating a new closure per render.
+const NO_RAYCAST = () => undefined;
+
+interface PalletPartitionProps {
+  pallet: VizPallet;
+  truck: DimensionsCm;
+  partition: Partition;
+  baseHeight: number;
+  stackHeightRaw: number;
+  isFocused: boolean;
+  dimmed: boolean;
+}
+
+// Renders one partition's contents on the pallet base. Cases get N stacked
+// layered boxes filling the sub-footprint; barrels get a 2x2 grid of
+// cylinders (or 1x2 / 2x1 when the sub-footprint is short along one axis).
+function PalletPartition({
+  pallet,
+  truck,
+  partition,
+  baseHeight,
+  stackHeightRaw,
+  isFocused,
+  dimmed,
+}: PalletPartitionProps) {
+  const heightFactor = heightFactorForKind(partition.kind);
+  const stackHeight = stackHeightRaw * heightFactor;
+  const isBarrel = partition.kind === "barrel";
+  const fillColor = colorForKind(partition.kind);
+  const edgeColor = edgeForKind(partition.kind);
+
+  // Center of this partition's footprint, in pallet-local cm before scene
+  // transform. Length axis (x) is offset by the partition's start.
+  const partCenterXcm =
+    pallet.position.x + partition.offsetXcm + partition.lengthCm / 2;
+  const partCenterYcm = pallet.position.y + partition.widthCm / 2;
+
+  const layerPlan = useMemo(() => {
+    if (isBarrel || stackHeight === 0) return null;
+    const numLayers = Math.max(1, Math.round(stackHeight / LAYER_TARGET_CM));
+    const slotHeight = stackHeight / numLayers;
+    const meshHeight = Math.max(1, slotHeight - LAYER_GAP_CM);
+    const centersZcm: number[] = [];
+    for (let i = 0; i < numLayers; i++) {
+      centersZcm.push(i * slotHeight + meshHeight / 2);
+    }
+    return { meshHeight, centersZcm };
+  }, [isBarrel, stackHeight]);
+
+  // Barrel grid sizing — 2 rows × N cols where N depends on how much length
+  // the partition has (each cell needs ~36 cm of length to fit a barrel of
+  // reasonable diameter). A barrel-only pallet lands on the original 2x2;
+  // a narrow mixed partition collapses to 2x1.
+  const barrelPlan = useMemo(() => {
+    if (!isBarrel || stackHeight === 0) return null;
+    const rows = 2;
+    const cellMinCm = 36;
+    const cols = Math.max(1, Math.floor(partition.lengthCm / cellMinCm));
+    const cellL = partition.lengthCm / cols;
+    const cellW = partition.widthCm / rows;
+    const diameterCm = Math.min(cellL, cellW) * 0.92;
+    const offsetsCm: Array<[number, number]> = [];
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        offsetsCm.push([
+          (i + 0.5) * cellL - partition.lengthCm / 2,
+          (j + 0.5) * cellW - partition.widthCm / 2,
+        ]);
+      }
+    }
+    return { offsetsCm, diameterCm, heightCm: stackHeight };
+  }, [isBarrel, stackHeight, partition.lengthCm, partition.widthCm]);
+
+  const layerGeo = useMemo(() => {
+    if (!layerPlan) return null;
+    return new BoxGeometry(
+      partition.lengthCm * CM_TO_SCENE,
+      layerPlan.meshHeight * CM_TO_SCENE,
+      partition.widthCm * CM_TO_SCENE,
+    );
+  }, [partition.lengthCm, partition.widthCm, layerPlan]);
+  const layerEdgesGeo = useMemo(
+    () => (layerGeo ? new EdgesGeometry(layerGeo) : null),
+    [layerGeo],
+  );
+
+  const barrelGeo = useMemo(() => {
+    if (!barrelPlan) return null;
+    const radius = (barrelPlan.diameterCm / 2) * CM_TO_SCENE;
+    const height = barrelPlan.heightCm * CM_TO_SCENE;
+    return new CylinderGeometry(radius, radius, height, 24, 1);
+  }, [barrelPlan]);
+  const barrelEdgesGeo = useMemo(
+    () => (barrelGeo ? new EdgesGeometry(barrelGeo) : null),
+    [barrelGeo],
+  );
+
+  const fillMat = useMemo(
+    () =>
+      new MeshBasicMaterial({
+        color: fillColor,
+        transparent: true,
+        opacity: 1,
+        depthWrite: false,
+      }),
+    [fillColor],
+  );
+  const edgeMat = useMemo(
+    () =>
+      new LineBasicMaterial({
+        color: edgeColor,
+        transparent: true,
+        opacity: 1,
+      }),
+    [edgeColor],
+  );
+
+  useEffect(
+    () => () => {
+      layerGeo?.dispose();
+      layerEdgesGeo?.dispose();
+      barrelGeo?.dispose();
+      barrelEdgesGeo?.dispose();
+      fillMat.dispose();
+      edgeMat.dispose();
+    },
+    [layerGeo, layerEdgesGeo, barrelGeo, barrelEdgesGeo, fillMat, edgeMat],
+  );
+
+  const layerCenters = useMemo<Array<[number, number, number]>>(() => {
+    if (!layerPlan) return [];
+    return layerPlan.centersZcm.map((zCm) =>
+      toScenePos(
+        {
+          x: partCenterXcm,
+          y: partCenterYcm,
+          z: pallet.position.z + baseHeight + STACK_GAP_CM + zCm,
+        },
+        truck,
+      ),
+    );
+  }, [partCenterXcm, partCenterYcm, pallet.position.z, baseHeight, truck, layerPlan]);
+
+  const barrelCenters = useMemo<Array<[number, number, number]>>(() => {
+    if (!barrelPlan) return [];
+    const cz =
+      pallet.position.z + baseHeight + STACK_GAP_CM + barrelPlan.heightCm / 2;
+    return barrelPlan.offsetsCm.map(([dxCm, dyCm]) =>
+      toScenePos(
+        { x: partCenterXcm + dxCm, y: partCenterYcm + dyCm, z: cz },
+        truck,
+      ),
+    );
+  }, [partCenterXcm, partCenterYcm, pallet.position.z, baseHeight, truck, barrelPlan]);
+
+  // Animation: dim out when another pallet is hovered. Only target opacity is
+  // damped down — fully opaque is snapped on the way back to avoid the
+  // newly-focused pallet showing a lingering transparency from a prior dim.
+  const targetFillOpacity = dimmed ? 0.06 : 1;
+  const targetEdgeOpacity = dimmed ? 0.08 : 1;
+
+  useFrame((_, delta) => {
+    const lambda = 9;
+    const snapOpaque = !dimmed;
+    fillMat.opacity = snapOpaque
+      ? 1
+      : MathUtils.damp(fillMat.opacity, targetFillOpacity, lambda, delta);
+    fillMat.depthWrite = fillMat.opacity > 0.95;
+    edgeMat.opacity = snapOpaque
+      ? 1
+      : MathUtils.damp(edgeMat.opacity, targetEdgeOpacity, lambda, delta);
+    edgeMat.depthWrite = false;
+  });
+
+  return (
+    <>
       {layerGeo &&
         layerEdgesGeo &&
         layerCenters.map((center, i) => (
           <group key={i} position={center}>
             <mesh
               geometry={layerGeo}
-              material={layerFillMat}
+              material={fillMat}
               renderOrder={isFocused ? 10 : 0}
-              raycast={noRaycast}
+              raycast={NO_RAYCAST}
             />
             <lineSegments
               geometry={layerEdgesGeo}
-              material={layerEdgeMat}
+              material={edgeMat}
               renderOrder={isFocused ? 11 : 1}
-              raycast={noRaycast}
+              raycast={NO_RAYCAST}
             />
           </group>
         ))}
@@ -1044,19 +1176,19 @@ function Pallet({
           <group key={i} position={center}>
             <mesh
               geometry={barrelGeo}
-              material={layerFillMat}
+              material={fillMat}
               renderOrder={isFocused ? 10 : 0}
-              raycast={noRaycast}
+              raycast={NO_RAYCAST}
             />
             <lineSegments
               geometry={barrelEdgesGeo}
-              material={layerEdgeMat}
+              material={edgeMat}
               renderOrder={isFocused ? 11 : 1}
-              raycast={noRaycast}
+              raycast={NO_RAYCAST}
             />
           </group>
         ))}
-    </group>
+    </>
   );
 }
 

@@ -17,11 +17,7 @@ export function palletDisplayColor(pallet: VizPallet): string {
   return colorForKind(pallet.kind);
 }
 
-export function palletEdgeColor(pallet: VizPallet): string {
-  return edgeForKind(pallet.kind);
-}
-
-function colorForKind(kind: PalletKind): string {
+export function colorForKind(kind: PalletKind): string {
   switch (kind) {
     case "barrel":
       return PALLET_COLOR.barrel;
@@ -33,7 +29,7 @@ function colorForKind(kind: PalletKind): string {
   }
 }
 
-function edgeForKind(kind: PalletKind): string {
+export function edgeForKind(kind: PalletKind): string {
   switch (kind) {
     case "barrel":
       return PALLET_COLOR.barrelEdge;
@@ -49,6 +45,6 @@ function edgeForKind(kind: PalletKind): string {
 // height of a bottle pallet of the same data height — matching the ZM040
 // reference (ED13 1.69 m vs ED13LT 1.44 m → ~0.85). Bottles and barrels
 // stay at 1.0.
-export function palletHeightFactor(pallet: VizPallet): number {
-  return pallet.kind === "case-can" ? 0.8 : 1;
+export function heightFactorForKind(kind: PalletKind): number {
+  return kind === "case-can" ? 0.8 : 1;
 }

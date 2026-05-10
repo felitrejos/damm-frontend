@@ -242,9 +242,3 @@ export function buildTruckVisualization(
 ): TruckVisualization {
   return adaptTruckLayout(buildTruckLayout(truckType));
 }
-
-// Convenience: previous default used by /preview/route/[id] before review
-// feedback. Kept for tests that import the symbol directly; production
-// flow should go through buildTruckVisualization(truckType).
-export const sampleTruckVisualization: TruckVisualization =
-  buildTruckVisualization("8pal");
