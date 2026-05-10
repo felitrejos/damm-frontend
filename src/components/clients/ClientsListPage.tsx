@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { useChatSurface } from "@/components/chat/ChatSurfaceProvider";
+import { ConfirmDeleteDialog } from "@/components/shared/ConfirmDeleteDialog";
 import { DataTable } from "@/components/shared/DataTable";
 import { RemoteDataState } from "@/components/shared/RemoteDataState";
 import { PageLayout } from "@/components/shell/PageLayout";
 import { useBreadcrumb } from "@/components/shell/breadcrumb";
-import type { Customer } from "@/lib/api/catalog";
-import { clientColumns } from "./columns";
+import { deleteCustomer, type Customer } from "@/lib/api/catalog";
+
+import { AddClientModal } from "./AddClientModal";
+import { EditClientModal } from "./EditClientModal";
+import { buildClientColumns } from "./columns";
 
 type ClientsListPageProps = {
   initialClients: Customer[];
@@ -19,8 +24,12 @@ export function ClientsListPage({
   initialClients,
   initialError,
 }: ClientsListPageProps) {
+  const router = useRouter();
   const [clients] = useState<Customer[]>(initialClients);
   const [selected, setSelected] = useState<Customer | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Customer | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null);
   const { setCrumbs } = useBreadcrumb();
 
   useEffect(() => {
@@ -41,6 +50,15 @@ export function ClientsListPage({
       }),
       [],
     ),
+  );
+
+  const columns = useMemo(
+    () =>
+      buildClientColumns({
+        onEdit: (c) => setEditTarget(c),
+        onDelete: (c) => setDeleteTarget(c),
+      }),
+    [],
   );
 
   return (
@@ -66,7 +84,7 @@ export function ClientsListPage({
         ) : (
           <DataTable
             data={clients}
-            columns={clientColumns}
+            columns={columns}
             getRowId={(row) => row.id}
             searchColumnId="name"
             searchPlaceholder="Search clients..."
@@ -74,6 +92,8 @@ export function ClientsListPage({
             filterColumnId="city"
             filterLabel="Filter by city"
             filterMobileLabel="City"
+            addButtonLabel="Add Client"
+            onAdd={() => setAddOpen(true)}
             selectedRowId={selected?.id ?? null}
             onRowClick={(client) =>
               setSelected((curr) => (curr?.id === client.id ? null : client))
@@ -81,6 +101,28 @@ export function ClientsListPage({
           />
         )}
       </div>
+
+      <AddClientModal open={addOpen} onOpenChange={setAddOpen} />
+      <EditClientModal
+        open={editTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+        client={editTarget}
+      />
+      <ConfirmDeleteDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Delete client?"
+        description={`This permanently deletes "${deleteTarget?.name ?? ""}" from the customer catalog.`}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          await deleteCustomer(deleteTarget.id);
+          router.refresh();
+        }}
+      />
     </PageLayout>
   );
 }

@@ -1,17 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { useChatSurface } from "@/components/chat/ChatSurfaceProvider";
+import { ConfirmDeleteDialog } from "@/components/shared/ConfirmDeleteDialog";
 import { DataTable } from "@/components/shared/DataTable";
 import { RemoteDataState } from "@/components/shared/RemoteDataState";
 import { PageLayout } from "@/components/shell/PageLayout";
 import { useBreadcrumb } from "@/components/shell/breadcrumb";
-import type { Driver } from "@/lib/api/catalog";
-import { driverColumns } from "./columns";
+import { deleteDriver, type DriverWithZones } from "@/lib/api/catalog";
+
+import { AddDriverModal } from "./AddDriverModal";
+import { EditDriverModal } from "./EditDriverModal";
+import { buildDriverColumns } from "./columns";
 
 type DriversListPageProps = {
-  initialDrivers: Driver[];
+  initialDrivers: DriverWithZones[];
   initialError?: string;
 };
 
@@ -19,8 +24,14 @@ export function DriversListPage({
   initialDrivers,
   initialError,
 }: DriversListPageProps) {
-  const [drivers] = useState<Driver[]>(initialDrivers);
-  const [selected, setSelected] = useState<Driver | null>(null);
+  const router = useRouter();
+  const [drivers] = useState<DriverWithZones[]>(initialDrivers);
+  const [selected, setSelected] = useState<DriverWithZones | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<DriverWithZones | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DriverWithZones | null>(
+    null,
+  );
   const { setCrumbs } = useBreadcrumb();
 
   useEffect(() => {
@@ -43,13 +54,23 @@ export function DriversListPage({
     ),
   );
 
+  const columns = useMemo(
+    () =>
+      buildDriverColumns({
+        onEdit: (d) => setEditTarget(d),
+        onDelete: (d) => setDeleteTarget(d),
+      }),
+    [],
+  );
+
   return (
     <PageLayout>
       <div className="px-6 md:px-10 pt-8 pb-10 flex flex-col gap-7">
         <div>
           <h2 className="headline text-ink">Drivers</h2>
           <p className="body-lg text-ink-muted mt-2">
-            Driver records loaded from the backend operational database.
+            Driver records and the zones each one knows best — derived from
+            their delivery history.
           </p>
         </div>
 
@@ -66,11 +87,13 @@ export function DriversListPage({
         ) : (
           <DataTable
             data={drivers}
-            columns={driverColumns}
+            columns={columns}
             getRowId={(row) => row.id}
             searchColumnId="name"
             searchPlaceholder="Search drivers..."
             searchAriaLabel="Search drivers"
+            addButtonLabel="Add Driver"
+            onAdd={() => setAddOpen(true)}
             selectedRowId={selected?.id ?? null}
             onRowClick={(driver) =>
               setSelected((curr) => (curr?.id === driver.id ? null : driver))
@@ -78,6 +101,28 @@ export function DriversListPage({
           />
         )}
       </div>
+
+      <AddDriverModal open={addOpen} onOpenChange={setAddOpen} />
+      <EditDriverModal
+        open={editTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+        driver={editTarget}
+      />
+      <ConfirmDeleteDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Delete driver?"
+        description={`This permanently deletes driver "${deleteTarget?.name ?? ""}".`}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          await deleteDriver(deleteTarget.id);
+          router.refresh();
+        }}
+      />
     </PageLayout>
   );
 }

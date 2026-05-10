@@ -52,3 +52,121 @@ export function listCustomers(): Promise<Customer[]> {
 export function listDrivers(): Promise<Driver[]> {
   return fetchJson("/api/v1/db/drivers?limit=10000", z.array(Driver));
 }
+
+// ----- Drivers with familiar zones (data router, derived from history) -----
+
+export const DriverZoneStat = z.object({
+  zone_code: z.string(),
+  visits: z.number(),
+});
+export type DriverZoneStat = z.infer<typeof DriverZoneStat>;
+
+export const DriverWithZones = z.object({
+  id: z.string(),
+  name: z.string(),
+  top_zones: z.array(DriverZoneStat).default([]),
+  total_visits: z.number().default(0),
+});
+export type DriverWithZones = z.infer<typeof DriverWithZones>;
+
+export function listDriversWithZones(): Promise<DriverWithZones[]> {
+  return fetchJson("/api/v1/data/drivers", z.array(DriverWithZones));
+}
+
+// ----- Catalog mutations (CRUD) -----
+//
+// Creates use the /catalog endpoints when they exist (auto-geocoding for
+// customers/warehouses, etc.). Updates and deletes go through the generic
+// /db/{table}/{id} CRUD because no behavioural difference is needed.
+
+export type CustomerCreate = {
+  name: string;
+  name_2?: string;
+  address?: string;
+  postal_code?: string;
+  city?: string;
+};
+export type CustomerUpdate = Partial<CustomerCreate>;
+
+export function createCustomer(input: CustomerCreate): Promise<Customer> {
+  return fetchJson("/api/v1/catalog/customers", Customer, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateCustomer(
+  id: string,
+  patch: CustomerUpdate,
+): Promise<Customer> {
+  return fetchJson(`/api/v1/db/customers/${id}`, Customer, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteCustomer(id: string): Promise<void> {
+  await fetchJson(
+    `/api/v1/db/customers/${id}`,
+    z.object({}).passthrough(),
+    { method: "DELETE" },
+  );
+}
+
+export type TruckCreate = {
+  plate: string;
+  capacity_pallets: number;
+  warehouse_id?: string | null;
+};
+export type TruckUpdate = Partial<TruckCreate>;
+
+export function createTruck(input: TruckCreate): Promise<Truck> {
+  return fetchJson("/api/v1/catalog/trucks", Truck, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateTruck(id: string, patch: TruckUpdate): Promise<Truck> {
+  return fetchJson(`/api/v1/db/trucks/${id}`, Truck, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteTruck(id: string): Promise<void> {
+  await fetchJson(`/api/v1/db/trucks/${id}`, z.object({}).passthrough(), {
+    method: "DELETE",
+  });
+}
+
+export type DriverCreate = { name: string };
+export type DriverUpdate = Partial<DriverCreate>;
+
+export function createDriver(input: DriverCreate): Promise<Driver> {
+  // No /catalog/drivers endpoint — drivers have no auto-geocode/etc to do,
+  // generic /db insert is sufficient.
+  return fetchJson("/api/v1/db/drivers", Driver, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateDriver(id: string, patch: DriverUpdate): Promise<Driver> {
+  return fetchJson(`/api/v1/db/drivers/${id}`, Driver, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteDriver(id: string): Promise<void> {
+  await fetchJson(`/api/v1/db/drivers/${id}`, z.object({}).passthrough(), {
+    method: "DELETE",
+  });
+}
