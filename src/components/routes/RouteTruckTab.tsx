@@ -217,7 +217,7 @@ function PalletList({
                       </span>
                     )}
                     <span className="truncate text-[13px] font-medium text-ink">
-                      {pallet.customer_name || pallet.pallet_id}
+                      {pallet.pallet_id}
                     </span>
                   </div>
                   <div
