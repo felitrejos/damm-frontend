@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { RouteReviewPanel } from "./RouteReviewPanel";
 import {
   generateSuggestedRoutesFromBackend,
+  persistAllSuggestedRoutes,
   persistSuggestedRoute,
 } from "@/lib/api/optimize";
 import { listAvailableDates } from "@/lib/api/orders";
@@ -167,8 +168,8 @@ export function AddRouteModal({ open, onOpenChange, centerId }: Props) {
         date: data.date,
         warehouseId: centerId,
       });
-      // Backend may return zero variations if all 3 calls fail or yield no
-      // route — fall back to the in-memory mock so the UI still renders.
+      // Backend may return zero routes if there's no demand for the date or
+      // the call yields nothing — fall back to the mock so the UI renders.
       const final = routes.length > 0 ? routes : generateSuggestedRoutes(data.date);
       setSuggestions(final);
       setActiveId(final[0]?.transport_id ?? null);
@@ -211,6 +212,31 @@ export function AddRouteModal({ open, onOpenChange, centerId }: Props) {
     }
   };
 
+  // Persist every suggestion in the current plan in parallel. Reports any
+  // partial failures inline; on full success closes the modal and refreshes.
+  const handleSaveAll = async () => {
+    if (suggestions.length === 0) return;
+    setSaving(true);
+    setSaveErrorMsg(null);
+    try {
+      const { failed } = await persistAllSuggestedRoutes(suggestions, centerId);
+      router.refresh();
+      if (failed.length > 0) {
+        setSaveErrorMsg(
+          `Saved ${suggestions.length - failed.length}/${suggestions.length}; ${failed.length} failed.`,
+        );
+      } else {
+        handleOpenChange(false);
+      }
+    } catch (err) {
+      setSaveErrorMsg(
+        err instanceof Error ? err.message : "Could not save routes",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const active = suggestions.find((s) => s.transport_id === activeId) ?? null;
 
   return (
@@ -246,6 +272,7 @@ export function AddRouteModal({ open, onOpenChange, centerId }: Props) {
             onSelect={setActiveId}
             onClose={handleClose}
             onSave={handleSaveActive}
+            onSaveAll={handleSaveAll}
             saving={saving}
             errorMsg={errorMsg}
             saveErrorMsg={saveErrorMsg}
@@ -372,7 +399,7 @@ function LoadingPhase() {
         style={{ width: 120, height: 120 / (9 / 4) }}
       />
       <TextShimmer className="text-sm" duration={1.6}>
-        Generating routes...
+        Optimizing the day...
       </TextShimmer>
     </div>
   );
@@ -385,6 +412,7 @@ function ReviewPhase({
   onSelect,
   onClose,
   onSave,
+  onSaveAll,
   saving,
   errorMsg,
   saveErrorMsg,
@@ -395,6 +423,7 @@ function ReviewPhase({
   onSelect: (id: string) => void;
   onClose: () => void;
   onSave: () => void;
+  onSaveAll: () => void;
   saving: boolean;
   errorMsg: string | null;
   saveErrorMsg: string | null;
@@ -404,10 +433,10 @@ function ReviewPhase({
       <aside className="m-2 flex flex-col overflow-hidden rounded-xl border bg-canvas/60">
         <div className="px-4 py-3">
           <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Suggested
+            Day plan
           </div>
           <div className="text-sm font-medium">
-            {suggestions.length} route{suggestions.length === 1 ? "" : "s"}
+            {suggestions.length} truck{suggestions.length === 1 ? "" : "s"}
           </div>
         </div>
         <ul className="flex-1 overflow-y-auto p-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -494,8 +523,22 @@ function ReviewPhase({
           >
             Cancel
           </Button>
-          <Button type="button" onClick={onSave} disabled={saving}>
-            {saving ? "Saving..." : "Save selected route"}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onSave}
+            disabled={saving}
+          >
+            {saving ? "Saving..." : "Save selected"}
+          </Button>
+          <Button
+            type="button"
+            onClick={onSaveAll}
+            disabled={saving || suggestions.length === 0}
+          >
+            {saving
+              ? "Saving..."
+              : `Save all (${suggestions.length})`}
           </Button>
         </div>
       </div>
