@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { IconUpload } from "@tabler/icons-react";
+import { IconChevronDown, IconFilter, IconUpload } from "@tabler/icons-react";
 
 import { useChatSurface } from "@/components/chat/ChatSurfaceProvider";
 import { ConfirmDeleteDialog } from "@/components/shared/ConfirmDeleteDialog";
@@ -10,7 +10,13 @@ import { DataTable } from "@/components/shared/DataTable";
 import { PageLayout } from "@/components/shell/PageLayout";
 import { useBreadcrumb } from "@/components/shell/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTab } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { AddRouteModal } from "@/components/routes/AddRouteModal";
 import { buildRouteColumns, type Route } from "@/components/routes/columns";
 import { RouteHero } from "@/components/routes/RouteHero";
@@ -25,12 +31,17 @@ type Props = {
   routes: Route[];
 };
 
-type Filter = "optimized" | "all";
+type Filter = "planned" | "completed";
 
 // Routes whose code starts with "OPT-" come from the optimizer's persist
 // endpoint. Filtering to those by default keeps the demo focused on what was
 // just generated, instead of drowning in 600+ historical transports.
-const isOptimized = (r: Route) => r.route_code.startsWith("OPT-");
+const isPlanned = (r: Route) => r.route_code.startsWith("OPT-");
+
+const FILTER_LABELS: Record<Filter, string> = {
+  planned: "Planned",
+  completed: "Completed",
+};
 
 export function CenterDetailPage({ center, routes }: Props) {
   const router = useRouter();
@@ -40,7 +51,7 @@ export function CenterDetailPage({ center, routes }: Props) {
   const [addRouteOpen, setAddRouteOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Route | null>(null);
-  const [filter, setFilter] = useState<Filter>("optimized");
+  const [filter, setFilter] = useState<Filter>("planned");
 
   useEffect(() => {
     setCrumbs([
@@ -82,14 +93,16 @@ export function CenterDetailPage({ center, routes }: Props) {
   // saved optimizer plans land right where the user expects them.
   const displayedRoutes = useMemo(() => {
     const filtered =
-      filter === "optimized" ? routes.filter(isOptimized) : routes;
+      filter === "planned"
+        ? routes.filter(isPlanned)
+        : routes.filter((r) => !isPlanned(r));
     return [...filtered].sort((a, b) => b.date.localeCompare(a.date));
   }, [routes, filter]);
 
-  const optimizedCount = useMemo(
-    () => routes.filter(isOptimized).length,
-    [routes],
-  );
+  const counts = useMemo(() => {
+    const planned = routes.filter(isPlanned).length;
+    return { planned, completed: routes.length - planned };
+  }, [routes]);
 
   return (
     <PageLayout>
@@ -129,25 +142,39 @@ export function CenterDetailPage({ center, routes }: Props) {
             addButtonLabel="Add Route"
             onAdd={() => setAddRouteOpen(true)}
             toolbarTrailing={
-              <Tabs
-                value={filter}
-                onValueChange={(v) => setFilter(v as Filter)}
-              >
-                <TabsList>
-                  <TabsTab value="optimized">
-                    Optimized
-                    <span className="ml-1 tabular-nums text-ink-tertiary">
-                      {optimizedCount}
-                    </span>
-                  </TabsTab>
-                  <TabsTab value="all">
-                    All
-                    <span className="ml-1 tabular-nums text-ink-tertiary">
-                      {routes.length}
-                    </span>
-                  </TabsTab>
-                </TabsList>
-              </Tabs>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button variant="outline" size="sm" />}
+                >
+                  <IconFilter />
+                  <span className="hidden lg:inline">
+                    {FILTER_LABELS[filter]}
+                  </span>
+                  <span className="rounded-full bg-muted px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+                    {counts[filter]}
+                  </span>
+                  <IconChevronDown />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  <DropdownMenuRadioGroup
+                    value={filter}
+                    onValueChange={(v) => setFilter(v as Filter)}
+                  >
+                    <DropdownMenuRadioItem value="planned">
+                      <span className="flex-1">Planned</span>
+                      <span className="ml-2 tabular-nums text-muted-foreground">
+                        {counts.planned}
+                      </span>
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="completed">
+                      <span className="flex-1">Completed</span>
+                      <span className="ml-2 tabular-nums text-muted-foreground">
+                        {counts.completed}
+                      </span>
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
             }
             selectedRowId={null}
             onRowClick={(r) => setSelectedRoute(r)}
