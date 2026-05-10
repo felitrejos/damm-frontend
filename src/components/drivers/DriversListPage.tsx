@@ -67,11 +67,11 @@ export function DriversListPage({
           <DataTable
             data={drivers}
             columns={driverColumns}
-            getRowId={(row) => row.id.toString()}
+            getRowId={(row) => row.id}
             searchColumnId="name"
             searchPlaceholder="Search drivers..."
             searchAriaLabel="Search drivers"
-            selectedRowId={selected?.id.toString() ?? null}
+            selectedRowId={selected?.id ?? null}
             onRowClick={(driver) =>
               setSelected((curr) => (curr?.id === driver.id ? null : driver))
             }

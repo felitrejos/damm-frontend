@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { IconCalendar } from "@tabler/icons-react";
 import { Controller, useForm } from "react-hook-form";
@@ -29,6 +30,11 @@ import { cn } from "@/lib/utils";
 
 import { RouteReviewPanel } from "./RouteReviewPanel";
 import {
+  generateSuggestedRoutesFromBackend,
+  persistSuggestedRoute,
+} from "@/lib/api/optimize";
+import { listAvailableDates } from "@/lib/api/orders";
+import {
   generateSuggestedRoutes,
   type SuggestedRoute,
 } from "./suggested-routes-mock";
@@ -42,10 +48,8 @@ type FormData = z.infer<typeof formSchema>;
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  centerId: number;
+  centerId: string;
 };
-
-const today = () => new Date().toISOString().slice(0, 10);
 
 const isoToDate = (iso: string): Date | undefined => {
   if (!iso) return undefined;
@@ -71,17 +75,52 @@ const formatDate = (iso: string): string => {
 
 type Phase = "form" | "loading" | "review";
 
-const LOADING_MS = 5000;
-
 export function AddRouteModal({ open, onOpenChange, centerId }: Props) {
+  const router = useRouter();
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: { date: today() },
+    defaultValues: { date: "" },
   });
 
   const [phase, setPhase] = React.useState<Phase>("form");
   const [suggestions, setSuggestions] = React.useState<SuggestedRoute[]>([]);
   const [activeId, setActiveId] = React.useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+  const [saving, setSaving] = React.useState(false);
+  const [saveErrorMsg, setSaveErrorMsg] = React.useState<string | null>(null);
+  const [availableDates, setAvailableDates] = React.useState<Set<string>>(
+    () => new Set(),
+  );
+  const [loadingDates, setLoadingDates] = React.useState(false);
+
+  // Fetch the set of dates that have undelivered orders, so the picker can
+  // grey out anything the optimizer would just return empty for.
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoadingDates(true);
+    listAvailableDates()
+      .then((dates) => {
+        if (cancelled) return;
+        setAvailableDates(new Set(dates));
+        // Default the picker to the earliest available date if user hasn't
+        // chosen one yet for this open cycle.
+        const current = form.getValues("date");
+        if (!current && dates.length > 0) {
+          form.setValue("date", dates[0]!);
+        }
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn("[AddRouteModal] could not load available dates:", err);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDates(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, form]);
 
   const { setContext } = useChatSurfaceState();
   React.useEffect(() => {
@@ -106,10 +145,13 @@ export function AddRouteModal({ open, onOpenChange, centerId }: Props) {
   }, [open, phase, suggestions, activeId, centerId, setContext]);
 
   const reset = React.useCallback(() => {
-    form.reset({ date: today() });
+    form.reset({ date: "" });
     setPhase("form");
     setSuggestions([]);
     setActiveId(null);
+    setErrorMsg(null);
+    setSaving(false);
+    setSaveErrorMsg(null);
   }, [form]);
 
   const handleOpenChange = (next: boolean) => {
@@ -117,25 +159,56 @@ export function AddRouteModal({ open, onOpenChange, centerId }: Props) {
     onOpenChange(next);
   };
 
-  const handleGenerate = form.handleSubmit((data) => {
+  const handleGenerate = form.handleSubmit(async (data) => {
     setPhase("loading");
-    window.setTimeout(() => {
-      const routes = generateSuggestedRoutes(data.date);
-      setSuggestions(routes);
-      setActiveId(routes[0]?.transport_id ?? null);
+    setErrorMsg(null);
+    try {
+      const routes = await generateSuggestedRoutesFromBackend({
+        date: data.date,
+        warehouseId: centerId,
+      });
+      // Backend may return zero variations if all 3 calls fail or yield no
+      // route — fall back to the in-memory mock so the UI still renders.
+      const final = routes.length > 0 ? routes : generateSuggestedRoutes(data.date);
+      setSuggestions(final);
+      setActiveId(final[0]?.transport_id ?? null);
       setPhase("review");
-    }, LOADING_MS);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[AddRouteModal] optimizer call failed:", err);
+      setErrorMsg(
+        err instanceof Error ? err.message : "Optimizer call failed",
+      );
+      const fallback = generateSuggestedRoutes(data.date);
+      setSuggestions(fallback);
+      setActiveId(fallback[0]?.transport_id ?? null);
+      setPhase("review");
+    }
   });
 
-  const handleDone = () => {
-    // No endpoint yet — every suggestion is added eventually, so log the
-    // whole batch and close.
-    // eslint-disable-next-line no-console
-    console.log("[AddRouteModal] done — adding all suggestions:", {
-      centerId,
-      routes: suggestions,
-    });
+  const handleClose = () => {
     handleOpenChange(false);
+  };
+
+  // Persist the currently active suggestion via /api/v1/optimize/persist.
+  // After success, refresh the parent so the new transport appears in the
+  // center's route list, then close the modal.
+  const handleSaveActive = async () => {
+    const active = suggestions.find((s) => s.transport_id === activeId);
+    if (!active) return;
+    setSaving(true);
+    setSaveErrorMsg(null);
+    try {
+      await persistSuggestedRoute(active, centerId);
+      router.refresh();
+      handleOpenChange(false);
+    } catch (err) {
+      setSaveErrorMsg(
+        err instanceof Error ? err.message : "Could not save route",
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   const active = suggestions.find((s) => s.transport_id === activeId) ?? null;
@@ -158,6 +231,8 @@ export function AddRouteModal({ open, onOpenChange, centerId }: Props) {
             form={form}
             onSubmit={handleGenerate}
             onCancel={() => handleOpenChange(false)}
+            availableDates={availableDates}
+            loadingDates={loadingDates}
           />
         ) : null}
 
@@ -169,7 +244,11 @@ export function AddRouteModal({ open, onOpenChange, centerId }: Props) {
             active={active}
             activeId={activeId}
             onSelect={setActiveId}
-            onDone={handleDone}
+            onClose={handleClose}
+            onSave={handleSaveActive}
+            saving={saving}
+            errorMsg={errorMsg}
+            saveErrorMsg={saveErrorMsg}
           />
         ) : null}
       </DialogContent>
@@ -181,11 +260,21 @@ function FormPhase({
   form,
   onSubmit,
   onCancel,
+  availableDates,
+  loadingDates,
 }: {
   form: ReturnType<typeof useForm<FormData>>;
   onSubmit: (e: React.BaseSyntheticEvent) => void;
   onCancel: () => void;
+  availableDates: Set<string>;
+  loadingDates: boolean;
 }) {
+  const hasDates = availableDates.size > 0;
+  const isDateDisabled = React.useCallback(
+    (d: Date) => !availableDates.has(dateToIso(d)),
+    [availableDates],
+  );
+
   return (
     <form
       onSubmit={onSubmit}
@@ -194,7 +283,8 @@ function FormPhase({
       <div className="flex flex-col items-center gap-2 text-center">
         <DialogTitle className="text-xl">Add route</DialogTitle>
         <DialogDescription className="max-w-sm">
-          Pick a date to generate suggestions.
+          Pick a date to generate suggestions. Only days with pending orders
+          are selectable.
         </DialogDescription>
       </div>
 
@@ -213,12 +303,17 @@ function FormPhase({
                     id="date"
                     type="button"
                     variant="outline"
+                    disabled={loadingDates || !hasDates}
                     className="w-full justify-start border-transparent bg-accent font-normal text-foreground hover:bg-accent/80 dark:border-transparent dark:bg-accent dark:hover:bg-accent/80"
                   />
                 }
               >
                 <IconCalendar className="mr-2 size-4 opacity-60" />
-                {formatDate(field.value)}
+                {loadingDates
+                  ? "Loading dates..."
+                  : !hasDates
+                    ? "No dates available"
+                    : formatDate(field.value)}
               </PopoverTrigger>
               <PopoverContent align="start" className="w-auto p-0">
                 <Calendar
@@ -227,6 +322,7 @@ function FormPhase({
                   onSelect={(d) => {
                     if (d) field.onChange(dateToIso(d));
                   }}
+                  disabled={isDateDisabled}
                   autoFocus
                 />
               </PopoverContent>
@@ -246,6 +342,7 @@ function FormPhase({
         </Button>
         <button
           type="submit"
+          disabled={loadingDates || !hasDates}
           className="inline-flex h-8 items-center justify-center gap-2 rounded-md bg-white px-3 text-[12px] font-medium text-[#111111] ring-1 ring-foreground/10 transition-colors hover:bg-white/90 disabled:opacity-50"
           title="Generate routes"
         >
@@ -286,13 +383,21 @@ function ReviewPhase({
   active,
   activeId,
   onSelect,
-  onDone,
+  onClose,
+  onSave,
+  saving,
+  errorMsg,
+  saveErrorMsg,
 }: {
   suggestions: SuggestedRoute[];
   active: SuggestedRoute;
   activeId: string | null;
   onSelect: (id: string) => void;
-  onDone: () => void;
+  onClose: () => void;
+  onSave: () => void;
+  saving: boolean;
+  errorMsg: string | null;
+  saveErrorMsg: string | null;
 }) {
   return (
     <div className="grid grid-cols-[270px_1fr]">
@@ -345,9 +450,13 @@ function ReviewPhase({
         <div className="flex flex-col gap-1 px-4 py-3">
           <DialogTitle>Suggested routes — {active.route_code}</DialogTitle>
           <DialogDescription className="sr-only">
-            Review the suggested routes — all of them will be added when you
-            click Done.
+            Review the suggested routes generated by the optimizer.
           </DialogDescription>
+          {errorMsg ? (
+            <p className="text-[12px] text-destructive">
+              Optimizer error — showing fallback. ({errorMsg})
+            </p>
+          ) : null}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-muted-foreground">
             <span>
               <span className="text-muted-foreground/70">Driver:</span>{" "}
@@ -371,9 +480,22 @@ function ReviewPhase({
           <RouteReviewPanel route={active} />
         </div>
 
-        <div className="mt-auto flex justify-end border-t bg-muted/50 p-4">
-          <Button type="button" onClick={onDone}>
-            Done
+        <div className="mt-auto flex items-center justify-end gap-3 border-t bg-muted/50 p-4">
+          {saveErrorMsg ? (
+            <span className="mr-auto text-[12px] text-destructive">
+              {saveErrorMsg}
+            </span>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+          <Button type="button" onClick={onSave} disabled={saving}>
+            {saving ? "Saving..." : "Save selected route"}
           </Button>
         </div>
       </div>

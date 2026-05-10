@@ -17,13 +17,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createWarehouse } from "@/lib/api/warehouses";
+import { updateWarehouse, type Warehouse } from "@/lib/api/warehouses";
 
 const formSchema = z.object({
   name: z.string().min(1, "Required"),
   city: z.string().min(1, "Required"),
-  address: z.string().optional(),
   postal_code: z.string().optional(),
+  address: z.string().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -31,63 +31,63 @@ type FormData = z.infer<typeof formSchema>;
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  center: Warehouse | null;
 };
 
-export function AddCenterModal({ open, onOpenChange }: Props) {
+export function EditCenterModal({ open, onOpenChange, center }: Props) {
   const router = useRouter();
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: { name: "", city: "", address: "", postal_code: "" },
+    defaultValues: { name: "", city: "", postal_code: "", address: "" },
   });
 
   const [submitting, setSubmitting] = React.useState(false);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
 
+  // Re-seed the form whenever a different center is opened.
+  React.useEffect(() => {
+    if (!open || !center) return;
+    form.reset({
+      name: center.name,
+      city: center.city ?? "",
+      postal_code: center.postal_code ?? "",
+      address: center.address ?? "",
+    });
+    setErrorMsg(null);
+  }, [open, center, form]);
+
+  if (!center) return null;
+
   const onSubmit = async (data: FormData) => {
     setSubmitting(true);
     setErrorMsg(null);
     try {
-      await createWarehouse(data);
+      await updateWarehouse(center.id, data);
       onOpenChange(false);
-      form.reset();
       router.refresh();
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Could not create center");
+      setErrorMsg(err instanceof Error ? err.message : "Could not update center");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleOpenChange = (next: boolean) => {
-    if (!next) {
-      form.reset();
-      setErrorMsg(null);
-    }
-    onOpenChange(next);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add center</DialogTitle>
-          <DialogDescription>
-            Register a new distribution center (warehouse).
-          </DialogDescription>
+          <DialogTitle>Edit center</DialogTitle>
+          <DialogDescription>Update warehouse details.</DialogDescription>
         </DialogHeader>
 
         <form
-          id="add-center-form"
+          id="edit-center-form"
           onSubmit={form.handleSubmit(onSubmit)}
           className="grid gap-4 py-2"
         >
           <div className="grid gap-1.5">
-            <Label htmlFor="name">Name</Label>
-            <Input
-              id="name"
-              placeholder="e.g. DDI Mollet"
-              {...form.register("name")}
-            />
+            <Label htmlFor="e-name">Name</Label>
+            <Input id="e-name" {...form.register("name")} />
             {form.formState.errors.name ? (
               <p className="text-[12px] text-destructive">
                 {form.formState.errors.name.message}
@@ -96,12 +96,8 @@ export function AddCenterModal({ open, onOpenChange }: Props) {
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="city">City</Label>
-            <Input
-              id="city"
-              placeholder="e.g. Mollet del Vallès"
-              {...form.register("city")}
-            />
+            <Label htmlFor="e-city">City</Label>
+            <Input id="e-city" {...form.register("city")} />
             {form.formState.errors.city ? (
               <p className="text-[12px] text-destructive">
                 {form.formState.errors.city.message}
@@ -110,21 +106,13 @@ export function AddCenterModal({ open, onOpenChange }: Props) {
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="postal_code">Postal code</Label>
-            <Input
-              id="postal_code"
-              placeholder="e.g. 08100"
-              {...form.register("postal_code")}
-            />
+            <Label htmlFor="e-postal_code">Postal code</Label>
+            <Input id="e-postal_code" {...form.register("postal_code")} />
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="address">Address</Label>
-            <Input
-              id="address"
-              placeholder="Street and number"
-              {...form.register("address")}
-            />
+            <Label htmlFor="e-address">Address</Label>
+            <Input id="e-address" {...form.register("address")} />
           </div>
 
           {errorMsg ? (
@@ -136,13 +124,13 @@ export function AddCenterModal({ open, onOpenChange }: Props) {
           <Button
             type="button"
             variant="outline"
-            onClick={() => handleOpenChange(false)}
+            onClick={() => onOpenChange(false)}
             disabled={submitting}
           >
             Cancel
           </Button>
-          <Button type="submit" form="add-center-form" disabled={submitting}>
-            {submitting ? "Creating..." : "Create"}
+          <Button type="submit" form="edit-center-form" disabled={submitting}>
+            {submitting ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>

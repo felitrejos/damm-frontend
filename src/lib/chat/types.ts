@@ -9,8 +9,9 @@ export type SurfaceKey =
 
 export type CatalogKind = "clients" | "drivers" | "trucks";
 
+// IDs are backend UUID strings.
 export type ChatSelected =
-  | { kind: "route"; routeId: number }
+  | { kind: "route"; routeId: string }
   | { kind: "suggested_route"; transportId: string }
   | null;
 
@@ -21,7 +22,7 @@ export type SiblingSuggestionSummary = Pick<
 
 export type PlannerChatContext = {
   surface: SurfaceKey;
-  centerId: number | null;
+  centerId: string | null;
   catalog?: CatalogKind;
   selected: ChatSelected;
   // add_route_review only — non-deterministic client state, sent in body

@@ -1,42 +1,72 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { IconMap2, IconTruck } from "@tabler/icons-react";
 
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
-import { sampleTrucks } from "@/components/trucks/sample-data";
+import { getTransport, type TransportDetail } from "@/lib/api/transports";
+import type { Warehouse } from "@/lib/api/warehouses";
 
 import type { Route } from "./columns";
 import { RouteMapTab } from "./RouteMapTab";
 import { RouteTruckTab } from "./RouteTruckTab";
-import { buildStopsForRoute, getCenterDepot } from "./route-stops";
+import { depotForCenter, transportStopsToRouteStops } from "./route-stops";
 import { buildTruckVisualization } from "./sample-data";
 
 type RouteHeroProps = {
   route: Route;
+  center?: Warehouse | null;
 };
 
-export function RouteHero({ route }: RouteHeroProps) {
-  const truck = useMemo(
-    () => sampleTrucks.find((t) => t.code === route.truck_code) ?? null,
-    [route.truck_code],
+type TruckTypeKey = "van" | "6pal" | "8pal";
+
+function normalizeTruckType(value: string | null | undefined): TruckTypeKey {
+  if (value === "van" || value === "6pal" || value === "8pal") return value;
+  return "8pal";
+}
+
+function capacityForType(type: TruckTypeKey): number {
+  if (type === "van") return 3;
+  if (type === "6pal") return 6;
+  return 8;
+}
+
+export function RouteHero({ route, center }: RouteHeroProps) {
+  const [detail, setDetail] = useState<TransportDetail | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDetail(null);
+    getTransport(route.transport_id).then((d) => {
+      if (!cancelled) setDetail(d);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [route.transport_id]);
+
+  const truckType = normalizeTruckType(
+    detail?.truck_type ?? route.truck_type ?? null,
   );
-  const truckType = (truck?.truck_type ?? "8pal") as "van" | "6pal" | "8pal";
-  const capacity = truck?.capacity_pallets ?? (truckType === "van" ? 3 : truckType === "6pal" ? 6 : 8);
+  const capacity = capacityForType(truckType);
   const visualization = useMemo(
     () => buildTruckVisualization(truckType),
     [truckType],
   );
-  const stops = useMemo(() => buildStopsForRoute(route), [route]);
-  const depot = useMemo(() => getCenterDepot(route.centerId), [route.centerId]);
+
+  const stops = useMemo(
+    () => (detail ? transportStopsToRouteStops(detail.stops) : []),
+    [detail],
+  );
+  const depot = useMemo(() => depotForCenter(center), [center]);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <header className="flex flex-wrap items-center gap-x-5 gap-y-2">
         <h2 id="route-hero-title" className="headline text-ink truncate">
-          {route.code}
+          {route.route_code}
         </h2>
-        <KpiInline route={route} />
+        <KpiInline route={route} truckType={truckType} />
       </header>
 
       <Tabs
@@ -69,23 +99,28 @@ export function RouteHero({ route }: RouteHeroProps) {
   );
 }
 
-function KpiInline({ route }: { route: Route }) {
+function KpiInline({
+  route,
+  truckType,
+}: {
+  route: Route;
+  truckType: TruckTypeKey;
+}) {
   const kpis = [
-    { label: "Driver", value: route.driver_name },
-    { label: "Truck", value: route.truck_code },
-    { label: "Stops", value: String(route.stops) },
+    { label: "Driver", value: route.driver_name ?? "—" },
+    { label: "Truck", value: truckType },
+    { label: "Stops", value: String(route.stop_count) },
     { label: "Date", value: route.date },
   ];
 
   return (
     <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
       {kpis.map(({ label, value }, idx) => (
-        <div
-          key={label}
-          className="flex items-baseline gap-1.5"
-        >
+        <div key={label} className="flex items-baseline gap-1.5">
           {idx > 0 && (
-            <span aria-hidden className="text-ink-tertiary">·</span>
+            <span aria-hidden className="text-ink-tertiary">
+              ·
+            </span>
           )}
           <dt className="text-[10px] font-medium uppercase tracking-wider text-ink-tertiary">
             {label}
@@ -98,3 +133,4 @@ function KpiInline({ route }: { route: Route }) {
     </dl>
   );
 }
+

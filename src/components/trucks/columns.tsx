@@ -1,37 +1,30 @@
 "use client";
 
 import type { ColumnDef } from "@tanstack/react-table";
-import type { Truck } from "@/lib/api/catalog";
+import { truckTypeFor, type Truck } from "@/lib/api/catalog";
 
 export type { Truck };
 
 export const truckColumns: ColumnDef<Truck>[] = [
   {
-    accessorKey: "code",
-    header: "Truck",
-    size: 300,
-    cell: ({ row }) => <div className="font-medium">{row.original.code}</div>,
-  },
-  {
     accessorKey: "plate",
     header: "Plate",
-    size: 180,
+    size: 220,
     cell: ({ row }) => (
-      <div className="text-muted-foreground">
-        {row.original.plate ?? "Unassigned"}
-      </div>
+      <div className="font-medium">{row.original.plate ?? "Unassigned"}</div>
     ),
   },
   {
-    accessorKey: "truck_type",
+    id: "truck_type",
     header: "Type",
     size: 140,
+    accessorFn: (row) => truckTypeFor(row.capacity_pallets),
     filterFn: (row, columnId, filterValue) => {
       const values = filterValue as string[] | undefined;
       if (!values?.length) return true;
       return values.includes(row.getValue(columnId) as string);
     },
-    cell: ({ row }) => <div>{row.original.truck_type}</div>,
+    cell: ({ row }) => <div>{truckTypeFor(row.original.capacity_pallets)}</div>,
   },
   {
     accessorKey: "capacity_pallets",
@@ -39,22 +32,6 @@ export const truckColumns: ColumnDef<Truck>[] = [
     size: 120,
     cell: ({ row }) => (
       <div className="tabular-nums">{row.original.capacity_pallets}</div>
-    ),
-  },
-  {
-    accessorKey: "active",
-    header: "Status",
-    size: 120,
-    cell: ({ row }) => (
-      <span
-        className={`inline-flex rounded-md px-2 py-1 text-xs font-medium ${
-          row.original.active
-            ? "bg-success/15 text-success"
-            : "bg-muted text-muted-foreground"
-        }`}
-      >
-        {row.original.active ? "Active" : "Inactive"}
-      </span>
     ),
   },
 ];

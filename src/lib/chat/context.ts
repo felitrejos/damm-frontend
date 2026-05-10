@@ -24,7 +24,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function parseSelected(value: unknown): ChatSelected {
   if (!isRecord(value)) return null;
   const kind = value.kind;
-  if (kind === "route" && typeof value.routeId === "number") {
+  if (kind === "route" && typeof value.routeId === "string") {
     return { kind: "route", routeId: value.routeId };
   }
   if (kind === "suggested_route" && typeof value.transportId === "string") {
@@ -74,7 +74,7 @@ export function parseChatContext(value: unknown): PlannerChatContext | undefined
   if (!surface) return undefined;
 
   const centerId =
-    typeof value.centerId === "number" ? value.centerId : null;
+    typeof value.centerId === "string" ? value.centerId : null;
   const catalog = catalogs.includes(value.catalog as CatalogKind)
     ? (value.catalog as CatalogKind)
     : undefined;

@@ -2,99 +2,109 @@
 
 import { IconDotsVertical } from "@tabler/icons-react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { TransportSummary } from "@/lib/api/transports";
 
-// Inspired by damm-backend TransportSummary: route_code, driver_name, date,
-// stop_count, truck_type. `centerId` scopes the route to a specific warehouse
-// (Center) — frontend addition.
-export const routeSchema = z.object({
-  id: z.number(),
-  code: z.string(),
-  driver_name: z.string(),
-  truck_code: z.string(),
-  stops: z.number(),
-  date: z.string(), // ISO YYYY-MM-DD
-  centerId: z.number(),
-});
+// "Route" in the UI === backend `Transport` (the scheduled instance with a
+// driver, date, and stop list). The `routes` table in backend is just the
+// route-code template and isn't surfaced here.
+export type Route = TransportSummary;
 
-export type Route = z.infer<typeof routeSchema>;
+// Edit isn't exposed yet — there's no clear semantic for "editing a transport"
+// (which fields? driver? truck? date?) so the dropdown only offers Delete.
+export type RouteRowActions = {
+  onDelete: (route: Route) => void;
+};
 
-export const routeColumns: ColumnDef<Route>[] = [
-  {
-    accessorKey: "code",
-    header: "Route",
-    size: 140,
-    cell: ({ row }) => <div className="font-medium">{row.original.code}</div>,
-  },
-  {
-    accessorKey: "driver_name",
-    header: "Driver",
-    size: 200,
-    cell: ({ row }) => <div>{row.original.driver_name}</div>,
-  },
-  {
-    accessorKey: "truck_code",
-    header: "Truck",
-    size: 120,
-    cell: ({ row }) => (
-      <div className="text-muted-foreground">{row.original.truck_code}</div>
-    ),
-  },
-  {
-    accessorKey: "stops",
-    header: "Stops",
-    size: 90,
-    cell: ({ row }) => (
-      <div className="tabular-nums">{row.original.stops}</div>
-    ),
-  },
-  {
-    accessorKey: "date",
-    header: "Date",
-    size: 130,
-    cell: ({ row }) => (
-      <div className="text-muted-foreground tabular-nums">
-        {row.original.date}
-      </div>
-    ),
-  },
-  {
-    id: "actions",
-    size: 56,
-    cell: () => (
-      <div
-        className="flex justify-end"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="ghost"
-                className="flex size-8 text-muted-foreground data-[state=open]:bg-muted"
-                size="icon"
-              />
-            }
-          >
-            <IconDotsVertical />
-            <span className="sr-only">Open menu</span>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-32">
-            <DropdownMenuItem>Edit</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    ),
-  },
-];
+export function buildRouteColumns(
+  actions?: RouteRowActions,
+): ColumnDef<Route>[] {
+  return [
+    {
+      accessorKey: "route_code",
+      header: "Route",
+      size: 140,
+      cell: ({ row }) => (
+        <div className="font-medium">{row.original.route_code}</div>
+      ),
+    },
+    {
+      accessorKey: "driver_name",
+      header: "Driver",
+      size: 240,
+      cell: ({ row }) => <div>{row.original.driver_name ?? "—"}</div>,
+    },
+    {
+      accessorKey: "truck_type",
+      header: "Truck",
+      size: 120,
+      cell: ({ row }) => (
+        <div className="text-muted-foreground">
+          {row.original.truck_type ?? "—"}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "stop_count",
+      header: "Stops",
+      size: 90,
+      cell: ({ row }) => (
+        <div className="tabular-nums">{row.original.stop_count}</div>
+      ),
+    },
+    {
+      accessorKey: "date",
+      header: "Date",
+      size: 130,
+      cell: ({ row }) => (
+        <div className="text-muted-foreground tabular-nums">
+          {row.original.date}
+        </div>
+      ),
+    },
+    {
+      id: "actions",
+      size: 56,
+      cell: ({ row }) => (
+        <div
+          className="flex justify-end"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  className="flex size-8 text-muted-foreground data-[state=open]:bg-muted"
+                  size="icon"
+                />
+              }
+            >
+              <IconDotsVertical />
+              <span className="sr-only">Open menu</span>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-32">
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => actions?.onDelete(row.original)}
+                disabled={!actions}
+              >
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      ),
+    },
+  ];
+}
+
+// Backwards-compatible export — read-only table without actions.
+export const routeColumns = buildRouteColumns();

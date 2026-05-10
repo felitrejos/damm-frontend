@@ -1,10 +1,8 @@
 import "server-only";
 
 import type { Center } from "@/components/centers/columns";
-import { sampleCenters } from "@/components/centers/sample-data";
 import type { Route } from "@/components/routes/columns";
-import { sampleRoutes } from "@/components/routes/sample-data";
-import { buildStopsForRoute, getCenterDepot } from "@/components/routes/route-stops";
+import { transportStopsToRouteStops, depotForCenter } from "@/components/routes/route-stops";
 import type { RouteStop } from "@/components/routes/types";
 import {
   listCustomers as listCustomersFromApi,
@@ -14,6 +12,18 @@ import {
   type Driver,
   type Truck,
 } from "@/lib/api/catalog";
+import { fetchJson } from "@/lib/api/client";
+import {
+  getTransport,
+  listTransports,
+} from "@/lib/api/transports";
+import { listWarehouses, getWarehouse } from "@/lib/api/warehouses";
+import { z } from "zod";
+
+const RawTransport = z.object({
+  id: z.string(),
+  truck_id: z.string().nullable().optional(),
+});
 
 async function safeList<T>(
   loader: () => Promise<T[]>,
@@ -31,29 +41,59 @@ export type Depot = { lat: number; lng: number };
 
 export interface PlannerDataSource {
   listCenters(): Promise<Center[]>;
-  getCenter(id: number): Promise<Center | null>;
-  listRoutesForCenter(centerId: number): Promise<Route[]>;
-  getRoute(routeId: number): Promise<Route | null>;
+  getCenter(id: string): Promise<Center | null>;
+  listRoutesForCenter(centerId: string): Promise<Route[]>;
+  getRoute(routeId: string): Promise<Route | null>;
   listCustomers(): Promise<Customer[]>;
   listDrivers(): Promise<Driver[]>;
   listTrucks(): Promise<Truck[]>;
-  getTruckByCode(code: string): Promise<Truck | null>;
+  getTruckById(id: string): Promise<Truck | null>;
   getStopsForRoute(route: Route): Promise<RouteStop[]>;
-  getDepotForCenter(centerId: number): Promise<Depot | null>;
+  getDepotForCenter(centerId: string): Promise<Depot | null>;
 }
 
-const mockBackedDataSource: PlannerDataSource = {
+async function transportsForWarehouse(centerId: string): Promise<Route[]> {
+  try {
+    const [summaries, trucks, raw] = await Promise.all([
+      listTransports(),
+      listTrucksFromApi(),
+      fetchJson("/api/v1/db/transports?limit=10000", z.array(RawTransport)),
+    ]);
+    const truckIds = new Set(
+      trucks.filter((t) => t.warehouse_id === centerId).map((t) => t.id),
+    );
+    const transportIds = new Set(
+      raw
+        .filter((t) => t.truck_id != null && truckIds.has(t.truck_id))
+        .map((t) => t.id),
+    );
+    return summaries.filter((s) => transportIds.has(s.transport_id));
+  } catch {
+    return [];
+  }
+}
+
+const liveDataSource: PlannerDataSource = {
   async listCenters() {
-    return sampleCenters;
+    return safeList(listWarehouses, "listCenters");
   },
   async getCenter(id) {
-    return sampleCenters.find((c) => c.id === id) ?? null;
+    return getWarehouse(id);
   },
   async listRoutesForCenter(centerId) {
-    return sampleRoutes.filter((r) => r.centerId === centerId);
+    return transportsForWarehouse(centerId);
   },
   async getRoute(routeId) {
-    return sampleRoutes.find((r) => r.id === routeId) ?? null;
+    const detail = await getTransport(routeId);
+    if (!detail) return null;
+    return {
+      transport_id: detail.transport_id,
+      route_code: detail.route_code,
+      driver_name: detail.driver_name ?? null,
+      date: detail.date,
+      stop_count: detail.stops.length,
+      truck_type: detail.truck_type ?? null,
+    };
   },
   listCustomers() {
     return safeList(listCustomersFromApi, "listCustomers");
@@ -64,18 +104,21 @@ const mockBackedDataSource: PlannerDataSource = {
   listTrucks() {
     return safeList(listTrucksFromApi, "listTrucks");
   },
-  async getTruckByCode(code) {
-    const trucks = await safeList(listTrucksFromApi, "getTruckByCode");
-    return trucks.find((t) => t.code === code) ?? null;
+  async getTruckById(id) {
+    const trucks = await safeList(listTrucksFromApi, "getTruckById");
+    return trucks.find((t) => t.id === id) ?? null;
   },
   async getStopsForRoute(route) {
-    return buildStopsForRoute(route);
+    const detail = await getTransport(route.transport_id);
+    if (!detail) return [];
+    return transportStopsToRouteStops(detail.stops);
   },
   async getDepotForCenter(centerId) {
-    return getCenterDepot(centerId);
+    const center = await getWarehouse(centerId);
+    return depotForCenter(center);
   },
 };
 
 export function getDataSource(): PlannerDataSource {
-  return mockBackedDataSource;
+  return liveDataSource;
 }
