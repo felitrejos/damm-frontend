@@ -260,7 +260,13 @@ export async function generateSuggestedRoutesFromBackend({
       date,
       warehouse_id: warehouseId,
       max_orders: 200,
-      respect_time_windows: true,
+      // Time windows are seeded for ~half of the customers and the
+      // overlapping ones are infeasible together — or-tools always returns
+      // None within the time limit and falls back to greedy. Soft-disabling
+      // them lets or-tools converge (verified: same input solves to 4 trucks
+      // in <60s vs greedy's 5 trucks). Re-enable once windows become soft
+      // constraints in the backend solver.
+      respect_time_windows: false,
       solver_time_limit_s: 25,
     }),
   ]);
