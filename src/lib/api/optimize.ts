@@ -10,6 +10,18 @@ import type {
 // modal review surface renders are typed strictly — the rest are kept loose
 // (passthrough) so backend additions don't break the parse.
 
+// Defined inline before OrderedStopSchema so the latter can reference it.
+const BackendProductOnStopSchema = z
+  .object({
+    material_code: z.string(),
+    description: z.string().nullable().optional(),
+    quantity: z.number(),
+    unit: z.string(),
+    category: z.string().nullable().optional(),
+    is_returnable: z.boolean().optional(),
+  })
+  .passthrough();
+
 const OrderedStopSchema = z
   .object({
     stop_id: z.string(),
@@ -20,6 +32,10 @@ const OrderedStopSchema = z
     city: z.string().nullable().optional(),
     lat: z.number().nullable().optional(),
     lng: z.number().nullable().optional(),
+    // Per-stop products. The optimizer emits this for every stop; we
+    // forward it through SuggestedStop so persistSuggestedRoute can ship
+    // it back to /optimize/persist for stashing on delivery_stops rows.
+    products: z.array(BackendProductOnStopSchema).default([]),
   })
   .passthrough();
 
@@ -157,6 +173,10 @@ export async function persistSuggestedRoute(
       city: s.city,
       lat: s.lat,
       lng: s.lng,
+      // Forward per-stop products so the backend can stash them on the
+      // delivery_stops row. Without this the persist endpoint receives an
+      // empty list and the map view shows zero products per customer.
+      products: s.products ?? [],
     })),
     total_stops: suggestion.total_stops,
   };
@@ -221,6 +241,7 @@ function routeResultToSuggested(
     lat: s.lat ?? null,
     lng: s.lng ?? null,
     zone: zoneByCustomer.get(s.customer_id) ?? "—",
+    products: s.products,
   }));
 
   return {
