@@ -38,5 +38,10 @@ export function transportStopsToRouteStops(
       time_window: s.time_window ?? null,
       estimated_arrival: s.estimated_arrival ?? null,
       service_time_min: SERVICE_TIME_MIN,
+      products: s.products.map((p) => ({
+        description: p.description ?? p.material_code,
+        quantity: p.quantity,
+        unit: p.unit,
+      })),
     }));
 }

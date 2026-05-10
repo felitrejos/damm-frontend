@@ -18,10 +18,22 @@ const TimeWindow = z.object({
   close: z.string(),
 });
 
-// Backend includes a richer payload (products, returnables, payment_condition,
-// etc.). Schema captures the fields the UI currently renders; unknown ones are
-// dropped by Zod.parse since strict() isn't set on z.object by default but we
-// keep it permissive via .passthrough where useful — here we explicitly list.
+// Subset of the backend product line — shared between persisted load plans
+// and the per-stop products surfaced on TransportStop. Backend additions
+// pass through silently.
+const PersistedProduct = z
+  .object({
+    material_code: z.string(),
+    description: z.string().nullable().optional(),
+    quantity: z.number(),
+    unit: z.string(),
+    category: z.string().nullable().optional(),
+    is_returnable: z.boolean().optional(),
+  })
+  .passthrough();
+
+// Backend includes a richer payload (returnables, payment_condition, etc.).
+// Schema captures the fields the UI renders; unknown ones drop silently.
 export const TransportStop = z.object({
   stop_id: z.string().optional(),
   sequence: z.number(),
@@ -34,21 +46,11 @@ export const TransportStop = z.object({
   lng: z.number().nullable().optional(),
   time_window: TimeWindow.nullable().optional(),
   estimated_arrival: z.string().nullable().optional(),
+  // Per-stop product list. Lets the map view show what each customer
+  // receives, in addition to the truck-level cargo summary.
+  products: z.array(PersistedProduct).default([]),
 });
 export type TransportStop = z.infer<typeof TransportStop>;
-
-// Subset of the backend LoadPlan shape — only the fields the truck
-// visualization adapter consumes. Backend additions pass through silently.
-const PersistedProduct = z
-  .object({
-    material_code: z.string(),
-    description: z.string().nullable().optional(),
-    quantity: z.number(),
-    unit: z.string(),
-    category: z.string().nullable().optional(),
-    is_returnable: z.boolean().optional(),
-  })
-  .passthrough();
 
 const PersistedPallet = z
   .object({

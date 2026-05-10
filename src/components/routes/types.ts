@@ -73,6 +73,14 @@ export interface TimeWindow {
   close: string;
 }
 
+// Per-stop product line. Mirrors the subset of backend ProductLine that
+// matters for the marker/sidebar display: unit/quantity/description.
+export interface StopProduct {
+  description: string;
+  quantity: number;
+  unit: string;
+}
+
 export interface RouteStop {
   stop_id: string;
   sequence: number;
@@ -85,4 +93,5 @@ export interface RouteStop {
   time_window: TimeWindow | null;
   estimated_arrival: string | null;
   service_time_min: number;
+  products: StopProduct[];
 }
