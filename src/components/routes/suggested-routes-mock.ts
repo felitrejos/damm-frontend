@@ -17,6 +17,28 @@ export type SuggestedStop = {
   zone: string;
 };
 
+// Inline shape for the backend LoadPlan we stash on a suggestion so the
+// downstream review/save flow can ship it to /optimize/persist intact.
+// Kept structural (not imported from optimize.ts) to avoid an import cycle.
+export type SuggestedRouteLoad = {
+  transport_id: string;
+  truck_type: string;
+  pallets: Array<{
+    pallet_index: number;
+    pallet_id: string;
+    stop_ids: string[];
+    is_returnables: boolean;
+    products_summary: string[];
+    products: Array<{
+      material_code: string;
+      description?: string | null;
+      quantity: number;
+      unit: string;
+      category?: string | null;
+    }>;
+  }>;
+};
+
 export type SuggestedRoute = {
   transport_id: string;
   route_code: string;
@@ -28,6 +50,10 @@ export type SuggestedRoute = {
   date: string;
   total_stops: number;
   ordered_stops: SuggestedStop[];
+  // Present when the suggestion came from the backend optimizer (not the
+  // in-memory mock). The persist flow forwards this so the load survives
+  // alongside the saved transport.
+  load?: SuggestedRouteLoad;
 };
 
 type FixtureClient = {
