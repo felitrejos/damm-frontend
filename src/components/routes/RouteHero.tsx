@@ -10,6 +10,7 @@ import type { Warehouse } from "@/lib/api/warehouses";
 import type { Route } from "./columns";
 import { RouteMapTab } from "./RouteMapTab";
 import { RouteTruckTab } from "./RouteTruckTab";
+import { adaptBackendLoadPlan } from "./backendLoadAdapter";
 import { depotForCenter, transportStopsToRouteStops } from "./route-stops";
 import { buildTruckVisualization } from "./sample-data";
 
@@ -49,10 +50,15 @@ export function RouteHero({ route, center }: RouteHeroProps) {
     detail?.truck_type ?? route.truck_type ?? null,
   );
   const capacity = capacityForType(truckType);
-  const visualization = useMemo(
-    () => buildTruckVisualization(truckType),
-    [truckType],
-  );
+  // Use the persisted LoadPlan when present (transports saved via the
+  // optimizer flow). Fallback to the deterministic mock for legacy/seeded
+  // transports that never had a LoadPlan attached.
+  const visualization = useMemo(() => {
+    if (detail?.load_plan) {
+      return adaptBackendLoadPlan(detail.load_plan);
+    }
+    return buildTruckVisualization(truckType);
+  }, [detail?.load_plan, truckType]);
 
   const stops = useMemo(
     () => (detail ? transportStopsToRouteStops(detail.stops) : []),

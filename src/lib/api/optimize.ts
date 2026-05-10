@@ -39,12 +39,54 @@ const RouteResultSchema = z
   })
   .passthrough();
 
+// Per-pallet payload from the backend LoadPlan. We only declare the fields
+// the truck visualization adapter consumes; the rest comes through
+// .passthrough so future backend additions don't break parsing.
+const BackendProductSchema = z
+  .object({
+    material_code: z.string(),
+    description: z.string().nullable().optional(),
+    quantity: z.number(),
+    unit: z.string(),
+    category: z.string().nullable().optional(),
+    is_returnable: z.boolean().optional(),
+  })
+  .passthrough();
+
+const BackendPalletSchema = z
+  .object({
+    pallet_index: z.number(),
+    pallet_id: z.string(),
+    stop_ids: z.array(z.string()).default([]),
+    is_returnables: z.boolean().default(false),
+    products: z.array(BackendProductSchema).default([]),
+    products_summary: z.array(z.string()).default([]),
+    total_height_cm: z.number().nullable().optional(),
+    total_weight_kg: z.number().nullable().optional(),
+    total_volume_l: z.number().nullable().optional(),
+  })
+  .passthrough();
+
+const BackendLoadPlanSchema = z
+  .object({
+    transport_id: z.string(),
+    truck_type: z.string(),
+    pallets: z.array(BackendPalletSchema).default([]),
+  })
+  .passthrough();
+
+export type BackendLoadPlan = z.infer<typeof BackendLoadPlanSchema>;
+export type BackendPallet = z.infer<typeof BackendPalletSchema>;
+export type BackendProduct = z.infer<typeof BackendProductSchema>;
+
 const OptimizationResultSchema = z
   .object({
     job_id: z.string(),
     status: z.string(),
     route: RouteResultSchema.nullable().optional(),
     routes: z.array(RouteResultSchema).optional(),
+    load: BackendLoadPlanSchema.nullable().optional(),
+    loads: z.array(BackendLoadPlanSchema).optional(),
     error_message: z.string().nullable().optional(),
   })
   .passthrough();
@@ -122,7 +164,13 @@ export async function persistSuggestedRoute(
   return fetchJson("/api/v1/optimize/persist", PersistResponseSchema, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ route, warehouse_id: warehouseId }),
+    // Forwarding `load` lets the backend stash the LoadPlan on the transport
+    // row so the truck visualization survives a refresh / future visit.
+    body: JSON.stringify({
+      route,
+      warehouse_id: warehouseId,
+      load: suggestion.load ?? null,
+    }),
   });
 }
 
@@ -162,6 +210,7 @@ function buildZoneIndex(customers: Customer[]): Map<string, string> {
 function routeResultToSuggested(
   route: z.infer<typeof RouteResultSchema>,
   zoneByCustomer: Map<string, string>,
+  load?: BackendLoadPlan,
 ): SuggestedRoute {
   const ordered_stops: SuggestedStop[] = route.ordered_stops.map((s) => ({
     stop_id: s.stop_id,
@@ -188,6 +237,7 @@ function routeResultToSuggested(
     date: route.date,
     total_stops: route.ordered_stops.length,
     ordered_stops,
+    load,
   };
 }
 
@@ -217,5 +267,14 @@ export async function generateSuggestedRoutesFromBackend({
 
   const zoneIndex = buildZoneIndex(customers);
   const routes = result.routes ?? (result.route ? [result.route] : []);
-  return routes.map((r) => routeResultToSuggested(r, zoneIndex));
+  // Backend returns loads aligned by index (and by transport_id) with routes.
+  // Build a lookup so we can attach each route's matching load even if the
+  // ordering ever drifts.
+  const loadById = new Map<string, BackendLoadPlan>();
+  for (const ld of result.loads ?? []) {
+    loadById.set(ld.transport_id, ld);
+  }
+  return routes.map((r) =>
+    routeResultToSuggested(r, zoneIndex, loadById.get(r.transport_id)),
+  );
 }
