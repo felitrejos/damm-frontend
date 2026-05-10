@@ -29,8 +29,19 @@ import type { RouteStop } from "./types";
 // polyline + per-leg durations come from public OSRM until the backend
 // `/preview/route/{id}` endpoint lands.
 
-const ROUTE_START_MIN = 9 * 60; // 09:00 — matches buildStopsForRoute
+// Default departure when the route has no scheduled start_time (older
+// transports, anything that didn't go through /optimize/persist).
+const DEFAULT_ROUTE_START_MIN = 9 * 60;
 const FALLBACK_AVG_SPEED_KMH = 22;
+
+function parseHHMMtoMin(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const parts = value.split(":");
+  if (parts.length !== 2) return null;
+  const h = Number(parts[0]);
+  const m = Number(parts[1]);
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+}
 
 type LegTiming = {
   durationMin: number; // travel time
@@ -54,6 +65,12 @@ type RouteMapTabProps = {
 type Speed = 1 | 4 | 16;
 
 export function RouteMapTab({ route, stops, depot }: RouteMapTabProps) {
+  // Real scheduled start when the route was persisted via /optimize/persist
+  // (no-overlap scheduling), 09:00 default otherwise. Drives the wall-clock
+  // display + late detection.
+  const routeStartMin =
+    parseHHMMtoMin(route.start_time) ?? DEFAULT_ROUTE_START_MIN;
+
   const [osrm, setOsrm] = useState<OsrmRoute | null>(null);
   const [loading, setLoading] = useState(true);
   const [simMin, setSimMin] = useState(0); // simulated minutes since route start
@@ -132,8 +149,11 @@ export function RouteMapTab({ route, stops, depot }: RouteMapTabProps) {
   );
 
   const stopStatuses = useMemo(
-    () => (timeline ? computeStopStatuses(timeline, stops, simMin) : []),
-    [timeline, stops, simMin],
+    () =>
+      timeline
+        ? computeStopStatuses(timeline, stops, simMin, routeStartMin)
+        : [],
+    [timeline, stops, simMin, routeStartMin],
   );
 
   const center: [number, number] = useMemo(() => {
@@ -265,7 +285,7 @@ export function RouteMapTab({ route, stops, depot }: RouteMapTabProps) {
                 <div className="space-y-0.5 text-[11px]">
                   <p className="font-medium">{route.driver_name}</p>
                   <p className="text-background/70">
-                    Sim time {fmtClock(ROUTE_START_MIN + simMin)}
+                    Sim time {fmtClock(routeStartMin + simMin)}
                   </p>
                 </div>
               </MarkerTooltip>
@@ -277,7 +297,7 @@ export function RouteMapTab({ route, stops, depot }: RouteMapTabProps) {
           <div className="pointer-events-auto flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 shadow-2xl">
             <IconClock className="size-3.5 text-black/70" aria-hidden />
             <span className="text-[13px] font-medium tabular-nums text-black">
-              {fmtClock(ROUTE_START_MIN + simMin)}
+              {fmtClock(routeStartMin + simMin)}
             </span>
           </div>
         </div>
@@ -287,6 +307,7 @@ export function RouteMapTab({ route, stops, depot }: RouteMapTabProps) {
           speed={speed}
           simMin={simMin}
           totalMin={timeline?.totalMin ?? 0}
+          routeStartMin={routeStartMin}
           disabled={!timeline}
           onPlayPause={() => setPlaying((p) => !p)}
           onReset={handleReset}
@@ -432,6 +453,7 @@ function SimControls({
   speed,
   simMin,
   totalMin,
+  routeStartMin,
   disabled,
   onPlayPause,
   onReset,
@@ -441,6 +463,7 @@ function SimControls({
   speed: Speed;
   simMin: number;
   totalMin: number;
+  routeStartMin: number;
   disabled: boolean;
   onPlayPause: () => void;
   onReset: () => void;
@@ -500,7 +523,7 @@ function SimControls({
         </div>
         <div className="flex items-center gap-2 text-[11px] tabular-nums text-white/70">
           <IconClock className="size-3.5" aria-hidden />
-          <span>{fmtClock(ROUTE_START_MIN + simMin)}</span>
+          <span>{fmtClock(routeStartMin + simMin)}</span>
           <div
             className="relative ml-1 h-1.5 flex-1 overflow-hidden rounded-full bg-white/10"
             role="progressbar"
@@ -687,6 +710,7 @@ function computeStopStatuses(
   timeline: Timeline,
   stops: RouteStop[],
   simMin: number,
+  routeStartMin: number,
 ): StopStatus[] {
   return stops.map((stop, idx) => {
     const arrival = timeline.phases.find(
@@ -708,8 +732,8 @@ function computeStopStatuses(
     let late = false;
     if (state !== "pending" && stop.time_window) {
       const closeMin = toMinutes(stop.time_window.close);
-      // arrived after close (relative to ROUTE_START)
-      if (ROUTE_START_MIN + arrivedAtMin > closeMin) late = true;
+      // Wall-clock arrival = route's scheduled start + sim minutes.
+      if (routeStartMin + arrivedAtMin > closeMin) late = true;
     }
 
     return { state, late, arrivedAtMin };
