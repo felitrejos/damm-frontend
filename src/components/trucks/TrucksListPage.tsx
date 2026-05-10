@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { useChatSurface } from "@/components/chat/ChatSurfaceProvider";
+import { ConfirmDeleteDialog } from "@/components/shared/ConfirmDeleteDialog";
 import { DataTable } from "@/components/shared/DataTable";
 import { RemoteDataState } from "@/components/shared/RemoteDataState";
 import { PageLayout } from "@/components/shell/PageLayout";
 import { useBreadcrumb } from "@/components/shell/breadcrumb";
-import type { Truck } from "@/lib/api/catalog";
-import { truckColumns } from "./columns";
+import { deleteTruck, type Truck } from "@/lib/api/catalog";
+
+import { AddTruckModal } from "./AddTruckModal";
+import { EditTruckModal } from "./EditTruckModal";
+import { buildTruckColumns } from "./columns";
 
 type TrucksListPageProps = {
   initialTrucks: Truck[];
@@ -19,8 +24,12 @@ export function TrucksListPage({
   initialTrucks,
   initialError,
 }: TrucksListPageProps) {
+  const router = useRouter();
   const [trucks] = useState<Truck[]>(initialTrucks);
   const [selected, setSelected] = useState<Truck | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Truck | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Truck | null>(null);
   const { setCrumbs } = useBreadcrumb();
 
   useEffect(() => {
@@ -41,6 +50,15 @@ export function TrucksListPage({
       }),
       [],
     ),
+  );
+
+  const columns = useMemo(
+    () =>
+      buildTruckColumns({
+        onEdit: (t) => setEditTarget(t),
+        onDelete: (t) => setDeleteTarget(t),
+      }),
+    [],
   );
 
   return (
@@ -66,7 +84,7 @@ export function TrucksListPage({
         ) : (
           <DataTable
             data={trucks}
-            columns={truckColumns}
+            columns={columns}
             getRowId={(row) => row.id}
             searchColumnId="plate"
             searchPlaceholder="Search trucks..."
@@ -74,6 +92,8 @@ export function TrucksListPage({
             filterColumnId="truck_type"
             filterLabel="Filter by type"
             filterMobileLabel="Type"
+            addButtonLabel="Add Truck"
+            onAdd={() => setAddOpen(true)}
             selectedRowId={selected?.id ?? null}
             onRowClick={(truck) =>
               setSelected((curr) => (curr?.id === truck.id ? null : truck))
@@ -81,6 +101,28 @@ export function TrucksListPage({
           />
         )}
       </div>
+
+      <AddTruckModal open={addOpen} onOpenChange={setAddOpen} />
+      <EditTruckModal
+        open={editTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+        truck={editTarget}
+      />
+      <ConfirmDeleteDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Delete truck?"
+        description={`This permanently deletes truck "${deleteTarget?.plate ?? ""}".`}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          await deleteTruck(deleteTarget.id);
+          router.refresh();
+        }}
+      />
     </PageLayout>
   );
 }
