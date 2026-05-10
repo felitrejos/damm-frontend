@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Fragment } from "react";
 
 import { useBreadcrumb } from "@/components/shell/breadcrumb";
@@ -14,7 +15,7 @@ export function Header({ onToggleSidebar, sidebarOpen }: Props) {
 
   return (
     <header className="sticky top-0 z-20 shrink-0 bg-canvas/90 backdrop-blur-md flex h-10 items-center">
-      <div className="flex items-center gap-2 px-3 md:w-60 md:shrink-0">
+      <div className="relative flex items-center gap-2 px-3 md:w-52 md:shrink-0 overflow-visible">
         <button
           type="button"
           aria-label="Open navigation"
@@ -32,14 +33,23 @@ export function Header({ onToggleSidebar, sidebarOpen }: Props) {
           </svg>
         </button>
 
-        <span className="text-lg font-semibold tracking-tight text-ink">
-          Damm SmartRoutes
-        </span>
+        <Link
+          href="/"
+          aria-label="Damm"
+          className="relative z-10 flex items-center"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/damm-logo.svg"
+            alt="Damm"
+            className="h-7 w-auto max-w-none pointer-events-auto"
+          />
+        </Link>
       </div>
 
       <nav
         aria-label="Breadcrumb"
-        className="flex flex-1 items-center gap-2 px-3 text-[13px] min-w-0"
+        className="flex flex-1 items-center gap-2 px-3 text-[13px] font-medium min-w-0"
       >
         {crumbs.map((crumb, i) => {
           const isLast = i === crumbs.length - 1;

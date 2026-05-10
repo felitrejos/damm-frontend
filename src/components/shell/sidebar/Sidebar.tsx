@@ -65,13 +65,13 @@ export function Sidebar({ open, onClose }: Props) {
       ) : null}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-60 flex-col bg-canvas px-2 pt-4 pb-2 transform transition-transform duration-200 ease-out ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-52 flex-col bg-canvas px-2 pt-4 pb-2 transform transition-transform duration-200 ease-out ${
           open ? "translate-x-0" : "-translate-x-full"
         } md:static md:translate-x-0 md:transform-none md:shrink-0`}
         aria-label="Primary"
       >
         <nav className="flex-1 overflow-y-auto pt-1">
-          <div className="mb-1 px-2 py-1 text-[11px] font-medium uppercase tracking-wider text-ink-tertiary">
+          <div className="mb-1 px-2 py-1 text-[11px] font-medium uppercase tracking-wider text-ink-subtle">
             Workspace
           </div>
           <ul className="space-y-0.5">
