@@ -33,10 +33,10 @@ type Props = {
 
 type Filter = "planned" | "completed";
 
-// Routes whose code starts with "OPT-" come from the optimizer's persist
-// endpoint. Filtering to those by default keeps the demo focused on what was
-// just generated, instead of drowning in 600+ historical transports.
-const isPlanned = (r: Route) => r.route_code.startsWith("OPT-");
+// Routes whose code contains "OPT-" come from the optimizer's persist
+// endpoint. `includes` (not `startsWith`) covers a legacy quirk where some
+// rows landed with a "Truck N · OPT-XX" prefix before that label was dropped.
+const isPlanned = (r: Route) => r.route_code.includes("OPT-");
 
 const FILTER_LABELS: Record<Filter, string> = {
   planned: "Planned",
@@ -120,18 +120,6 @@ export function CenterDetailPage({ center, routes }: Props) {
             </p>
           </div>
 
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setImportOpen(true)}
-              className="gap-1.5"
-            >
-              <IconUpload className="size-4" aria-hidden />
-              Import demo orders
-            </Button>
-          </div>
-
           <DataTable
             data={displayedRoutes}
             columns={columns}
@@ -142,7 +130,18 @@ export function CenterDetailPage({ center, routes }: Props) {
             addButtonLabel="Add Route"
             onAdd={() => setAddRouteOpen(true)}
             toolbarTrailing={
-              <DropdownMenu>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setImportOpen(true)}
+                >
+                  <IconUpload />
+                  <span className="hidden lg:inline">
+                    Import demo orders
+                  </span>
+                </Button>
+                <DropdownMenu>
                 <DropdownMenuTrigger
                   render={<Button variant="outline" size="sm" />}
                 >
@@ -175,6 +174,7 @@ export function CenterDetailPage({ center, routes }: Props) {
                   </DropdownMenuRadioGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
+              </>
             }
             selectedRowId={null}
             onRowClick={(r) => setSelectedRoute(r)}

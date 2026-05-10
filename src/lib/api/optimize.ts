@@ -166,7 +166,6 @@ function buildZoneIndex(customers: Customer[]): Map<string, string> {
 function routeResultToSuggested(
   route: z.infer<typeof RouteResultSchema>,
   zoneByCustomer: Map<string, string>,
-  index: number,
 ): SuggestedRoute {
   const ordered_stops: SuggestedStop[] = route.ordered_stops.map((s) => ({
     stop_id: s.stop_id,
@@ -181,9 +180,10 @@ function routeResultToSuggested(
 
   return {
     transport_id: route.transport_id,
-    // Prefix with truck index so the sidebar reads "Truck 1 · OPT-15" etc —
-    // useful when the solver returns N routes for the same plan.
-    route_code: `Truck ${index + 1} · ${route.route_code}`,
+    // Keep route_code exactly as the optimizer emitted it ("OPT-XX") so the
+    // persisted transport carries a clean label and the table filter (which
+    // matches /OPT-/) catches it.
+    route_code: route.route_code,
     driver_id: route.driver_id ?? "",
     driver_name: route.driver_name ?? "—",
     truck_id: route.vehicle_id ?? "",
@@ -221,5 +221,5 @@ export async function generateSuggestedRoutesFromBackend({
 
   const zoneIndex = buildZoneIndex(customers);
   const routes = result.routes ?? (result.route ? [result.route] : []);
-  return routes.map((r, i) => routeResultToSuggested(r, zoneIndex, i));
+  return routes.map((r) => routeResultToSuggested(r, zoneIndex));
 }
