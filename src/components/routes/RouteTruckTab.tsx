@@ -164,11 +164,11 @@ function PalletList({
     (p) => !p.is_empty && p.products.length > 0,
   );
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 rounded-md border border-border bg-surface-2 p-3">
       <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-subtle">
         Visible pallets
       </span>
-      <ol className="flex flex-col gap-1.5 overflow-y-auto pr-1">
+      <ol className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {realPallets.map((pallet) => {
           const isSelected = selectedId === pallet.pallet_id;
           const active = isSelected || hoveredId === pallet.pallet_id;
@@ -220,14 +220,14 @@ function PalletList({
                       {pallet.pallet_id}
                     </span>
                   </div>
-                  <div
-                    className={cn(
-                      "text-[12px] text-ink-subtle",
-                      isSelected ? "" : "truncate",
-                    )}
-                  >
-                    {summary}
-                  </div>
+                  {/* Preview line — shown only when collapsed. When the card
+                      expands, the CONTENTS list below has the same items
+                      with quantities, so this would just duplicate. */}
+                  {!isSelected && (
+                    <div className="truncate text-[12px] text-ink-subtle">
+                      {summary}
+                    </div>
+                  )}
                 </div>
               </div>
               {isSelected && <PalletDetail pallet={pallet} />}
