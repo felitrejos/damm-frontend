@@ -14,7 +14,7 @@ mocks.
 | `/` (centers picker)         | `sample-data.ts` mock       | `GET /api/v1/data/centers` (proposed)          |
 | `/centers/[id]` routes table | mock rows in component      | `GET /api/v1/data/routes?center_id=…` (proposed) |
 | RouteHero → Mapa stops       | `route-stops.ts` mock       | `GET /api/v1/data/routes/{route_id}/stops` (proposed) |
-| RouteHero → Camión truck viz | built locally from `truck_code` capacity | n/a — frontend-owned (no load planner in scope) |
+| RouteHero → Camión truck viz | sample `TruckLayout` adapted via `palletAdapter.ts` | `GET /api/v1/data/routes/{route_id}/load` returning `TruckLayout` (proposed); see `data-models.md` Visualization Models |
 | Health badge (if added)      | not displayed               | `GET /api/v1/health` (live)                    |
 
 The frontend mocks all validate against the shared Zod schemas; swapping

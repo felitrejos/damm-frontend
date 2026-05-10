@@ -139,28 +139,93 @@ class DeliveryStop(BaseModel):
 ## Visualization Models
 
 Used by the truck wireframe scene
-(`src/components/routes/TruckWireframeScene.tsx`). **Frontend-owned** —
-the scene is built locally from the route's `truck_code` and the matching
-truck's `capacity_pallets`. The backend is not expected to provide
-`TruckVisualization` payloads (load planning is out of scope); this shape
-exists so the wireframe code has a stable contract to render against.
+(`src/components/routes/TruckWireframeScene.tsx`). The frontend now
+consumes the backend's load-planning output directly — see the
+`TruckLayout` wire contract below — and adapts it to a domain
+`TruckVisualization` for the React components via
+`src/components/routes/palletAdapter.ts`.
+
+The contract change rationale lives at
+`wiki/decisions/2026-05-truck-load-contract.md`.
+
+### Wire contract — `TruckLayout` (backend → frontend)
+
+Backend ships this on the `RouteResult` / `LoadPlan` side. Field names
+and units match `damm-backend/services/optimization.py:build_truck_layout`.
 
 ```python
-class TruckVisualization(BaseModel):
-    truck_dims: dict = Field(default={"length_cm": 620, "width_cm": 240, "height_cm": 240})
-    pallet_dims: dict = Field(default={"length_cm": 120, "width_cm": 80, "height_cm": 15})
-    pallets: list[VizPallet] = []
-    route_geojson: dict | None = None
+class TruckLayout(BaseModel):
+    truck_type: Literal["6pal", "8pal", "van"]
+    rows: int
+    columns: int
+    pallet_dims_cm: DimensionsCm        # base of one pallet
+    truck_dims_cm: DimensionsCm         # cargo box outer dims
+    total_slots: int
+    used_slots: int
+    return_slots: int
+    slots: list[TruckSlot]
+    return_pallet: TruckSlot | None = None  # consolidated returnables; v1 frontend ignores
 
-class VizPallet(BaseModel):
+class TruckSlot(BaseModel):
     pallet_id: str
-    label: str
-    color: str
-    position: dict
-    dims: dict
-    is_return: bool = False
-    stop_ids: list[str] = []
-    products_summary: list[str] = []
+    column: int                         # 0..columns-1
+    row: int                            # 1-indexed; row 1 = nearest cabin
+    customer_name: str                  # may be slash-joined "A / B" for shared pallets
+    sequence: int | None                # stop ordering on the route; None for returnable
+    stop_id: str
+
+    is_empty: bool
+    is_return: bool
+    color: str                          # hex, optional visual override
+
+    loaded_height_cm: float             # total height incl. wooden base (~14.4 cm); empty pallets ≈ base only
+    kind: Literal["case-bottle", "case-can", "barrel"]   # server-derived; drives 3D shape
+
+    total_volume_l: float
+    total_weight_kg: float
+    products: list[BackendProduct]
+
+class BackendProduct(BaseModel):
+    material_code: str                  # currently UUID; short SKU column may land later
+    description: str
+    quantity: int                       # interpreted in `unit`
+    unit: Literal["CAJ", "BRL", "UN", "PAK"]
+```
+
+Returnables: `is_return: True` slots are filtered out by the v1
+frontend adapter; the consolidated `return_pallet` is ignored. Surfacing
+them is a follow-up.
+
+### Domain shape — `TruckVisualization` (post-adapter, what components consume)
+
+Built by `adaptTruckLayout(layout)`. Position is derived from the
+`(column, row)` grid + `pallet_dims_cm`; product fields are renamed
+(`material_code → sku`, `description → name`, `quantity → cases`); empty
+grid cells are back-filled with bare-base placeholder pallets so the 3D
+scene shows the truck at full capacity.
+
+```ts
+interface TruckVisualization {
+  truck_dims: DimensionsCm;
+  pallet_dims: DimensionsCm;
+  pallets: VizPallet[];
+  route_geojson: Record<string, unknown> | null;
+}
+
+interface VizPallet {
+  pallet_id: string;
+  customer_name: string;
+  sequence: number | null;
+  color: string;
+  position: PositionCm;             // cm, derived from grid
+  dims: DimensionsCm;               // dims.height_cm = slot.loaded_height_cm
+  kind: "case-bottle" | "case-can" | "barrel";
+  is_empty: boolean;
+  is_return: boolean;
+  total_volume_l: number;
+  total_weight_kg: number;
+  products: Product[];              // { sku, name, cases, unit }
+}
 ```
 
 Coordinate convention:
