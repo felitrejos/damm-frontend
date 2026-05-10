@@ -241,9 +241,16 @@ function PalletList({
 
 const UNIT_LABEL: Record<string, string> = {
   CAJ: "cases",
+  ZPR: "cases",
   BRL: "barrels",
   UN: "units",
   PAK: "packs",
+  BOT: "bottles",
+  TB: "tubes",
+  EST: "display-boxes",
+  BID: "bidons",
+  PQ: "packets",
+  KG: "kg",
 };
 
 function PalletDetail({ pallet }: { pallet: VizPallet }) {

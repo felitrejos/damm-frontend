@@ -44,6 +44,42 @@ const TRUCK_GRID: Record<
 // against the truck cargo height (240 cm) without poking through the roof.
 const DEFAULT_LOADED_HEIGHT_CM = 144;
 
+// Per-unit footprint factor: how many "pallet slots" one unit of quantity
+// consumes. CAJ is the reference (1 slot). Source: catalog tally the user
+// shared (CAJ 1.0, UN 0.2, BRL 4.0, BOT 0.1, TB 0.8, ZPR 1.0, PAK 1.0,
+// EST 1.0, BID 1.5, PQ 0.8, KG 1.0). Unknown units default to 1.
+const UNIT_FOOTPRINT: Record<string, number> = {
+  CAJ: 1.0,
+  ZPR: 1.0,
+  PAK: 1.0,
+  EST: 1.0,
+  KG:  1.0,
+  UN:  0.2,
+  BOT: 0.1,
+  TB:  0.8,
+  PQ:  0.8,
+  BID: 1.5,
+  BRL: 4.0,
+};
+
+// One layer of a typical case is ~24 cm tall. A 6-slot layer fits on a
+// standard EUR pallet. So a pallet with `slotsTotal` units climbs by
+// ceil(slots/SLOTS_PER_LAYER) layers, each LAYER_HEIGHT_CM tall, capped at
+// DEFAULT_LOADED_HEIGHT_CM so visuals don't poke through the roof.
+const SLOTS_PER_LAYER = 6;
+const LAYER_HEIGHT_CM = 24;
+
+function deriveStackHeightCm(products: PersistedProduct[]): number {
+  if (products.length === 0) return DEFAULT_LOADED_HEIGHT_CM;
+  const slots = products.reduce(
+    (sum, p) => sum + p.quantity * (UNIT_FOOTPRINT[p.unit?.toUpperCase() ?? ""] ?? 1),
+    0,
+  );
+  if (slots <= 0) return DEFAULT_LOADED_HEIGHT_CM;
+  const layers = Math.max(1, Math.ceil(slots / SLOTS_PER_LAYER));
+  return Math.min(DEFAULT_LOADED_HEIGHT_CM, layers * LAYER_HEIGHT_CM);
+}
+
 function normalizeTruckType(value: string | null | undefined): TruckTypeWire {
   if (value === "van" || value === "6pal" || value === "8pal") return value;
   return "8pal";
@@ -103,10 +139,13 @@ function inferKind(products: PersistedProduct[]): PalletKind {
   return "case-bottle";
 }
 
+const KNOWN_UNITS: ReadonlySet<Product["unit"]> = new Set([
+  "CAJ", "BRL", "UN", "PAK", "BOT", "TB", "ZPR", "EST", "BID", "PQ", "KG",
+]);
+
 function normalizeUnit(value: string): Product["unit"] {
-  const v = value.toUpperCase();
-  if (v === "BRL" || v === "UN" || v === "PAK") return v;
-  return "CAJ";
+  const v = value.toUpperCase() as Product["unit"];
+  return KNOWN_UNITS.has(v) ? v : "CAJ";
 }
 
 function toUiProduct(p: PersistedProduct): Product {
@@ -123,9 +162,13 @@ function palletToViz(
   index: number,
   columns: number,
 ): VizPallet {
+  // Prefer the backend's reported height when present (>1 cm). Backend
+  // currently emits 0 here, so most of the time we fall back to a height
+  // derived from the products on the pallet — keeps few-unit pallets short
+  // (single thin layer) instead of all rendering at the constant 144 cm.
   const heightSource = pallet.total_height_cm ?? 0;
   const loaded_height_cm =
-    heightSource > 1 ? heightSource : DEFAULT_LOADED_HEIGHT_CM;
+    heightSource > 1 ? heightSource : deriveStackHeightCm(pallet.products);
 
   return {
     pallet_id: pallet.pallet_id,

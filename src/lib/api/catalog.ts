@@ -53,6 +53,30 @@ export function listDrivers(): Promise<Driver[]> {
   return fetchJson("/api/v1/db/drivers?limit=10000", z.array(Driver));
 }
 
+export const MaterialType = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+});
+export type MaterialType = z.infer<typeof MaterialType>;
+
+export const Material = z.object({
+  id: z.string(),
+  description: z.string(),
+  base_unit: z.string().nullable().optional(),
+  material_type_id: z.string().nullable().optional(),
+  is_returnable: z.boolean().optional(),
+});
+export type Material = z.infer<typeof Material>;
+
+export function listMaterials(): Promise<Material[]> {
+  return fetchJson("/api/v1/catalog/materials", z.array(Material));
+}
+
+export function listMaterialTypes(): Promise<MaterialType[]> {
+  return fetchJson("/api/v1/catalog/material-types", z.array(MaterialType));
+}
+
 // ----- Drivers with familiar zones (data router, derived from history) -----
 
 export const DriverZoneStat = z.object({

@@ -21,9 +21,22 @@ export type PalletKind = "case-bottle" | "case-can" | "barrel";
 
 export type TruckTypeWire = "6pal" | "8pal" | "van";
 
-// Backend product unit. Drives how cases/quantity are labelled in the UI:
-//   CAJ -> "cases", BRL -> "barrels", UN -> "units", PAK -> "packs".
-export type ProductUnit = "CAJ" | "BRL" | "UN" | "PAK";
+// Backend product unit. Drives both the sidebar label ("cases", "barrels",
+// "units", ...) and — since the unit-color refactor — the 3D scene partition
+// color via paletteForUnit(). Keep aligned with the units the dataset uses
+// (see Orders sidebar). Unknown values fall back to CAJ at adapter time.
+export type ProductUnit =
+  | "CAJ"
+  | "BRL"
+  | "UN"
+  | "PAK"
+  | "BOT"
+  | "TB"
+  | "ZPR"
+  | "EST"
+  | "BID"
+  | "PQ"
+  | "KG";
 
 
 export interface Product {

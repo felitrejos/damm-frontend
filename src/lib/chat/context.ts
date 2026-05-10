@@ -106,6 +106,7 @@ export function contextLabelFor(ctx: PlannerChatContext | undefined): string {
         clients: "Clients catalog",
         drivers: "Drivers catalog",
         trucks: "Trucks catalog",
+        orders: "Orders catalog",
       };
       return ctx.catalog ? map[ctx.catalog] : "Catalog";
     }

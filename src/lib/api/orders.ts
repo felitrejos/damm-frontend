@@ -26,3 +26,18 @@ export async function listAvailableDates(): Promise<string[]> {
   return Array.from(set).sort();
 }
 
+export const Order = z.object({
+  id: z.string(),
+  customer_id: z.string(),
+  material_id: z.string(),
+  due_date: z.string().nullable().optional(),
+  quantity: z.number(),
+  sales_unit: z.string().nullable().optional(),
+  delivered_flag: z.boolean().optional(),
+});
+export type Order = z.infer<typeof Order>;
+
+export function listOrders(): Promise<Order[]> {
+  return fetchJson("/api/v1/db/orders?limit=10000", z.array(Order));
+}
+

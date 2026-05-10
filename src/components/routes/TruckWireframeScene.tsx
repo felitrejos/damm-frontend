@@ -22,9 +22,8 @@ import {
   type Mesh,
 } from "three";
 import {
-  colorForKind,
-  edgeForKind,
   heightFactorForKind,
+  paletteForUnit,
 } from "./palletColor";
 import type {
   DimensionsCm,
@@ -700,31 +699,41 @@ interface PalletProps {
 // Each pallet renders as a wooden base + N stacked layer boxes (one per
 // case-height layer of the load). Layers are full-footprint, separated by a
 // small visible gap so they read as distinct rows. When the pallet mixes
-// barrels with cases, the footprint splits along its length axis: cases on
-// the front half, barrels on the back half. Each partition has its own
-// shape, color, and material set.
+// multiple product `unit`s, the footprint splits along its length axis into
+// one strip per distinct unit (each strip in its own color). BRL partitions
+// keep the cylinder render; everything else renders as boxes.
 const LAYER_TARGET_CM = 30; // approximate visual height per layer
 const LAYER_GAP_CM = 0.4; // visible seam between layers
 const STACK_GAP_CM = 0.6;
 
-// Mixed pallets split along length using these bounds. Below the floor a
-// partition is too thin to render meaningfully; above the ceiling the other
-// partition collapses. Empirically, a barrel needs at least ~30% of pallet
-// length to look right (one row of 2 fits in ~36 cm).
-const PARTITION_FLOOR = 0.3;
-const PARTITION_CEILING = 0.7;
+// Per-strip length share clamps when a pallet has multiple units. Below the
+// floor a partition is too thin to read; above the ceiling the others
+// collapse. Single-unit pallets always get the full length, regardless.
+const PARTITION_FLOOR = 0.18;
+const PARTITION_CEILING = 0.82;
 
-// Per-unit area weight used to allocate footprint between partitions. Each
-// barrel takes considerably more pallet area than a single case, so the
-// weight ratio biases toward barrels even when case count is higher.
-const UNIT_WEIGHT: Record<string, number> = {
-  BRL: 5,
-  CAJ: 1,
-  UN: 1,
-  PAK: 1,
+// Pallet-slot footprint per unit, mirrors backendLoadAdapter.UNIT_FOOTPRINT.
+// Used here to size each unit's strip proportionally to the floor it would
+// actually occupy — not just product count.
+const UNIT_FOOTPRINT: Record<string, number> = {
+  CAJ: 1.0,
+  ZPR: 1.0,
+  PAK: 1.0,
+  EST: 1.0,
+  KG:  1.0,
+  UN:  0.2,
+  BOT: 0.1,
+  TB:  0.8,
+  PQ:  0.8,
+  BID: 1.5,
+  BRL: 4.0,
 };
 
 type Partition = {
+  // Driving identity — both color (paletteForUnit) and shape (BRL → cylinder)
+  // come from this. `kind` is kept for back-compat with code paths that may
+  // still inspect it; new code should branch on `unit`.
+  unit: string;
   kind: PalletKind;
   // Local offset from the pallet's origin along its length axis (cm).
   offsetXcm: number;
@@ -739,12 +748,10 @@ function partitionPallet(
   totalWidthCm: number,
   fallbackKind: PalletKind,
 ): Partition[] {
-  const barrels = products.filter((p) => p.unit === "BRL");
-  const cases = products.filter((p) => p.unit !== "BRL");
-
   if (products.length === 0) {
     return [
       {
+        unit: "CAJ",
         kind: fallbackKind,
         offsetXcm: 0,
         lengthCm: totalLengthCm,
@@ -753,56 +760,68 @@ function partitionPallet(
       },
     ];
   }
-  if (barrels.length === 0) {
-    return [
-      {
-        kind: fallbackKind === "barrel" ? "case-bottle" : fallbackKind,
-        offsetXcm: 0,
-        lengthCm: totalLengthCm,
-        widthCm: totalWidthCm,
-        products: cases,
-      },
-    ];
+
+  // Group products by unit, preserving first-seen order so the strip layout
+  // is stable across renders for the same pallet.
+  const order: string[] = [];
+  const byUnit = new Map<string, Product[]>();
+  for (const p of products) {
+    const u = p.unit.toUpperCase();
+    if (!byUnit.has(u)) {
+      byUnit.set(u, []);
+      order.push(u);
+    }
+    byUnit.get(u)!.push(p);
   }
-  if (cases.length === 0) {
+
+  if (order.length === 1) {
+    const unit = order[0]!;
     return [
       {
-        kind: "barrel",
+        unit,
+        kind: unit === "BRL" ? "barrel" : fallbackKind === "barrel"
+          ? "case-bottle"
+          : fallbackKind,
         offsetXcm: 0,
         lengthCm: totalLengthCm,
         widthCm: totalWidthCm,
-        products: barrels,
+        products: byUnit.get(unit)!,
       },
     ];
   }
 
-  const weight = (group: Product[]) =>
-    group.reduce((sum, p) => sum + p.cases * (UNIT_WEIGHT[p.unit] ?? 1), 0);
-  const total = weight(barrels) + weight(cases);
-  let barrelShare = total > 0 ? weight(barrels) / total : 0.5;
-  barrelShare = Math.max(PARTITION_FLOOR, Math.min(PARTITION_CEILING, barrelShare));
-  const barrelLen = totalLengthCm * barrelShare;
-  const caseLen = totalLengthCm - barrelLen;
+  // Multi-unit pallet: share length proportionally to each unit's slot
+  // footprint (quantity × per-unit factor). Then clamp shares so no strip
+  // collapses or hogs the whole pallet.
+  const slotsByUnit = order.map((u) =>
+    byUnit
+      .get(u)!
+      .reduce((sum, p) => sum + p.cases * (UNIT_FOOTPRINT[u] ?? 1), 0),
+  );
+  const total = slotsByUnit.reduce((a, b) => a + b, 0);
+  const rawShares = slotsByUnit.map((s) =>
+    total > 0 ? s / total : 1 / order.length,
+  );
+  const clamped = rawShares.map((s) =>
+    Math.max(PARTITION_FLOOR, Math.min(PARTITION_CEILING, s)),
+  );
+  const sumClamped = clamped.reduce((a, b) => a + b, 0);
+  const normalized = clamped.map((s) => s / sumClamped);
 
-  // Cases on the front (offset 0), barrels behind. Case partition's kind
-  // mirrors the dominant case-style (bottle vs can) — bottles by default.
-  const caseKind: PalletKind = fallbackKind === "case-can" ? "case-can" : "case-bottle";
-  return [
-    {
-      kind: caseKind,
-      offsetXcm: 0,
-      lengthCm: caseLen,
+  let cursor = 0;
+  return order.map((unit, i) => {
+    const lengthCm = totalLengthCm * normalized[i]!;
+    const part: Partition = {
+      unit,
+      kind: unit === "BRL" ? "barrel" : "case-bottle",
+      offsetXcm: cursor,
+      lengthCm,
       widthCm: totalWidthCm,
-      products: cases,
-    },
-    {
-      kind: "barrel",
-      offsetXcm: caseLen,
-      lengthCm: barrelLen,
-      widthCm: totalWidthCm,
-      products: barrels,
-    },
-  ];
+      products: byUnit.get(unit)!,
+    };
+    cursor += lengthCm;
+    return part;
+  });
 }
 
 function Pallet({
@@ -960,7 +979,7 @@ function Pallet({
 
       {partitions.map((partition, i) => (
         <PalletPartition
-          key={`${partition.kind}-${i}`}
+          key={`${partition.unit}-${i}`}
           pallet={pallet}
           truck={truck}
           partition={partition}
@@ -1002,9 +1021,10 @@ function PalletPartition({
 }: PalletPartitionProps) {
   const heightFactor = heightFactorForKind(partition.kind);
   const stackHeight = stackHeightRaw * heightFactor;
-  const isBarrel = partition.kind === "barrel";
-  const fillColor = colorForKind(partition.kind);
-  const edgeColor = edgeForKind(partition.kind);
+  const isBarrel = partition.unit === "BRL";
+  const palette = paletteForUnit(partition.unit);
+  const fillColor = palette.fill;
+  const edgeColor = palette.edge;
 
   // Center of this partition's footprint, in pallet-local cm before scene
   // transform. Length axis (x) is offset by the partition's start.
