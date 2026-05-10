@@ -240,6 +240,11 @@ export function RouteMapTab({ route, stops, depot }: RouteMapTabProps) {
                     <p className="text-background/70">
                       ETA {stop.estimated_arrival ?? "—"}
                     </p>
+                    {stop.products.length > 0 && (
+                      <p className="text-background/70">
+                        {summarizeProducts(stop.products)}
+                      </p>
+                    )}
                   </div>
                 </MarkerTooltip>
               </MapMarker>
@@ -315,40 +320,111 @@ function StopRow({
   status: StopStatus | undefined;
 }) {
   const state = status?.state ?? "pending";
+  const [expanded, setExpanded] = useState(false);
+  const hasProducts = stop.products.length > 0;
   return (
     <li
       className={cn(
-        "flex items-start gap-2.5 rounded-md border border-border bg-surface-1 px-2.5 py-2 transition-colors",
+        "rounded-md border border-border bg-surface-1 transition-colors",
         state === "at_stop" && "ring-1 ring-blue-500/60",
       )}
     >
-      <span
-        aria-hidden
+      <button
+        type="button"
+        onClick={() => hasProducts && setExpanded((v) => !v)}
+        disabled={!hasProducts}
+        aria-expanded={hasProducts ? expanded : undefined}
         className={cn(
-          "mt-0.5 grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white",
-          state === "delivered" && !status?.late && "bg-emerald-500",
-          state === "delivered" && status?.late && "bg-amber-500",
-          state === "at_stop" && "bg-blue-500",
-          state === "pending" && "bg-zinc-500",
+          "flex w-full items-start gap-2.5 px-2.5 py-2 text-left",
+          hasProducts &&
+            "cursor-pointer hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40",
         )}
       >
-        {stop.sequence}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[13px] font-medium text-ink">
-          {stop.customer_name}
-        </p>
-        <div className="flex items-center justify-between gap-2 text-[11px] text-ink-subtle">
-          <span className="truncate">{stop.address}</span>
-          {stop.time_window && (
-            <span className="shrink-0 tabular-nums">
-              {stop.time_window.open}–{stop.time_window.close}
-            </span>
+        <span
+          aria-hidden
+          className={cn(
+            "mt-0.5 grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white",
+            state === "delivered" && !status?.late && "bg-emerald-500",
+            state === "delivered" && status?.late && "bg-amber-500",
+            state === "at_stop" && "bg-blue-500",
+            state === "pending" && "bg-zinc-500",
+          )}
+        >
+          {stop.sequence}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-medium text-ink">
+            {stop.customer_name}
+          </p>
+          <div className="flex items-center justify-between gap-2 text-[11px] text-ink-subtle">
+            <span className="truncate">{stop.address}</span>
+            {stop.time_window && (
+              <span className="shrink-0 tabular-nums">
+                {stop.time_window.open}–{stop.time_window.close}
+              </span>
+            )}
+          </div>
+          {hasProducts && (
+            <div className="mt-0.5 flex items-center gap-1 text-[11px] text-ink-subtle">
+              <span className="truncate">{summarizeProducts(stop.products)}</span>
+              <span aria-hidden className="ml-auto shrink-0 text-ink-tertiary">
+                {expanded ? "▴" : "▾"}
+              </span>
+            </div>
           )}
         </div>
-      </div>
+      </button>
+      {expanded && hasProducts && (
+        <ul className="border-t border-border/60 px-2.5 py-2 flex flex-col gap-1">
+          {stop.products.map((p, i) => (
+            <li
+              key={`${p.description}-${i}`}
+              className="flex items-start gap-1.5 text-[12px] text-ink"
+            >
+              <span
+                aria-hidden
+                className="mt-1.5 size-1 shrink-0 rounded-full bg-ink-subtle"
+              />
+              <span className="min-w-0 flex-1">{p.description}</span>
+              <span className="shrink-0 tabular-nums text-ink-subtle">
+                {p.quantity} {unitLabel(p.unit)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </li>
   );
+}
+
+const STOP_UNIT_LABEL: Record<string, string> = {
+  CAJ: "cases",
+  BRL: "barrels",
+  UN: "units",
+  PAK: "packs",
+};
+
+function unitLabel(unit: string): string {
+  return STOP_UNIT_LABEL[unit] ?? unit.toLowerCase();
+}
+
+// One-line summary of a stop's products: collapses by unit so the marker
+// tooltip and list preview read naturally ("4 cases · 1 barrel" rather than
+// dumping each SKU). Sorted descending by quantity within each unit.
+function summarizeProducts(
+  products: { quantity: number; unit: string }[],
+): string {
+  if (products.length === 0) return "";
+  // globalThis.Map because the file imports a `Map` component from
+  // @/components/ui/map at module scope which shadows the built-in.
+  const totals = new globalThis.Map<string, number>();
+  for (const p of products) {
+    totals.set(p.unit, (totals.get(p.unit) ?? 0) + p.quantity);
+  }
+  return Array.from(totals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([unit, qty]) => `${qty} ${unitLabel(unit)}`)
+    .join(" · ");
 }
 
 function SimControls({
