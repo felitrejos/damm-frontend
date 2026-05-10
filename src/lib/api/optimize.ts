@@ -126,8 +126,10 @@ export async function persistSuggestedRoute(
   });
 }
 
-// Persist every suggestion of a generated plan in parallel. Returns the
-// per-route results; failures don't abort the rest.
+// Persist every suggestion of a generated plan, sequentially. Each request
+// hits a backend that does read-modify-write on the JSON DB without a lock,
+// so parallel calls race and only the last save survives. One-at-a-time is
+// slow-ish (~50ms × N) but correct; failures don't abort the rest.
 export async function persistAllSuggestedRoutes(
   suggestions: SuggestedRoute[],
   warehouseId: string,
@@ -135,19 +137,13 @@ export async function persistAllSuggestedRoutes(
   succeeded: PersistResponse[];
   failed: Array<{ suggestion: SuggestedRoute; error: unknown }>;
 }> {
-  const settled = await Promise.allSettled(
-    suggestions.map((s) =>
-      persistSuggestedRoute(s, warehouseId).then((res) => ({ s, res })),
-    ),
-  );
   const succeeded: PersistResponse[] = [];
   const failed: Array<{ suggestion: SuggestedRoute; error: unknown }> = [];
-  for (let i = 0; i < settled.length; i++) {
-    const r = settled[i]!;
-    if (r.status === "fulfilled") {
-      succeeded.push(r.value.res);
-    } else {
-      failed.push({ suggestion: suggestions[i]!, error: r.reason });
+  for (const s of suggestions) {
+    try {
+      succeeded.push(await persistSuggestedRoute(s, warehouseId));
+    } catch (error) {
+      failed.push({ suggestion: s, error });
     }
   }
   return { succeeded, failed };

@@ -1,14 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { IconCalendar } from "@tabler/icons-react";
-import { Controller, useForm } from "react-hook-form";
-import { z } from "zod";
+import { IconCloudUpload, IconFileText, IconX } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import {
   Dialog,
   DialogContent,
@@ -17,173 +12,151 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { importSampleOrders, type ImportResponse } from "@/lib/api/orders";
-
-const formSchema = z.object({
-  date: z.string().min(1, "Required"),
-});
-
-type FormData = z.infer<typeof formSchema>;
+import { cn } from "@/lib/utils";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
 
-const isoToDate = (iso: string): Date | undefined => {
-  if (!iso) return undefined;
-  const d = new Date(`${iso}T00:00:00`);
-  return Number.isNaN(d.getTime()) ? undefined : d;
+const formatBytes = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const dateToIso = (d: Date): string => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-};
-
-const formatDate = (iso: string): string => {
-  const d = isoToDate(iso);
-  return d
-    ? d.toLocaleDateString(undefined, {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })
-    : "Pick a date";
-};
-
-const today = (): string => dateToIso(new Date());
-
+// Decorative-only — drop zone shows the user *how* they could upload data
+// in a real version, but no upload happens. The seeded backend already has
+// 12k+ orders waiting for the planner.
 export function ImportOrdersModal({ open, onOpenChange }: Props) {
-  const router = useRouter();
-  const form = useForm<FormData>({
-    resolver: zodResolver(formSchema),
-    defaultValues: { date: today() },
-  });
-
-  const [submitting, setSubmitting] = React.useState(false);
-  const [result, setResult] = React.useState<ImportResponse | null>(null);
-  const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+  const [file, setFile] = React.useState<File | null>(null);
+  const [dragActive, setDragActive] = React.useState(false);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
 
   React.useEffect(() => {
     if (!open) {
-      setResult(null);
-      setErrorMsg(null);
-      setSubmitting(false);
-      form.reset({ date: today() });
+      setFile(null);
+      setDragActive(false);
     }
-  }, [open, form]);
+  }, [open]);
 
-  const onSubmit = async (data: FormData) => {
-    setSubmitting(true);
-    setErrorMsg(null);
-    setResult(null);
-    try {
-      const res = await importSampleOrders(data.date);
-      setResult(res);
-      router.refresh();
-    } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : "Import failed");
-    } finally {
-      setSubmitting(false);
-    }
+  const handleFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setFile(files[0] ?? null);
+  };
+
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(false);
+    handleFiles(e.dataTransfer.files);
+  };
+
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(true);
+  };
+
+  const onDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Import demo orders</DialogTitle>
+          <DialogTitle>Import orders</DialogTitle>
           <DialogDescription>
-            Loads the bundled sample CSV. All rows get the picked date as
-            their due_date — pick the day you want to plan for.
+            Upload a CSV with new orders. Required columns: customer_id,
+            material_id, quantity, sales_unit. Optional: due_date.
           </DialogDescription>
         </DialogHeader>
 
-        <form
-          id="import-orders-form"
-          onSubmit={form.handleSubmit(onSubmit)}
-          className="grid gap-4 py-2"
-        >
-          <div className="grid gap-1.5">
-            <Label htmlFor="import-date">Due date for imported orders</Label>
-            <Controller
-              control={form.control}
-              name="date"
-              render={({ field }) => (
-                <Popover>
-                  <PopoverTrigger
-                    render={
-                      <Button
-                        id="import-date"
-                        type="button"
-                        variant="outline"
-                        className="w-full justify-start font-normal"
-                      />
-                    }
-                  >
-                    <IconCalendar className="mr-2 size-4 opacity-60" />
-                    {formatDate(field.value)}
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-auto p-0">
-                    <Calendar
-                      mode="single"
-                      selected={isoToDate(field.value)}
-                      onSelect={(d) => {
-                        if (d) field.onChange(dateToIso(d));
-                      }}
-                      autoFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              )}
-            />
-            {form.formState.errors.date ? (
-              <p className="text-[12px] text-destructive">
-                {form.formState.errors.date.message}
-              </p>
-            ) : null}
+        <div className="py-2">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => inputRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                inputRef.current?.click();
+              }
+            }}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            className={cn(
+              "flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed px-6 py-10 text-center transition-colors cursor-pointer",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+              dragActive
+                ? "border-primary bg-primary/5"
+                : "border-border bg-surface-2 hover:bg-muted/40",
+            )}
+          >
+            {file ? (
+              <>
+                <IconFileText className="size-8 text-primary" aria-hidden />
+                <div className="text-[13px] font-medium text-ink">
+                  {file.name}
+                </div>
+                <div className="text-[11px] text-ink-subtle">
+                  {formatBytes(file.size)} · ready to import
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-1 gap-1.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setFile(null);
+                  }}
+                >
+                  <IconX className="size-3.5" aria-hidden />
+                  Remove
+                </Button>
+              </>
+            ) : (
+              <>
+                <IconCloudUpload
+                  className="size-9 text-ink-subtle"
+                  aria-hidden
+                />
+                <div className="text-[13px] font-medium text-ink">
+                  Drop your CSV here, or click to browse
+                </div>
+                <div className="text-[11px] text-ink-subtle">
+                  Only .csv files
+                </div>
+              </>
+            )}
           </div>
 
-          {result ? (
-            <p className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-[12px] text-success">
-              {result.inserted} order{result.inserted === 1 ? "" : "s"}{" "}
-              imported
-              {result.skipped > 0 ? ` · ${result.skipped} skipped` : ""}.
-            </p>
-          ) : null}
-
-          {errorMsg ? (
-            <p className="text-[12px] text-destructive">{errorMsg}</p>
-          ) : null}
-        </form>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(e) => handleFiles(e.target.files)}
+          />
+        </div>
 
         <DialogFooter>
           <Button
             type="button"
             variant="outline"
             onClick={() => onOpenChange(false)}
-            disabled={submitting}
           >
-            {result ? "Close" : "Cancel"}
+            Cancel
           </Button>
-          {!result ? (
-            <Button
-              type="submit"
-              form="import-orders-form"
-              disabled={submitting}
-            >
-              {submitting ? "Importing..." : "Import"}
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            disabled={!file}
+            onClick={() => onOpenChange(false)}
+          >
+            Import
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
