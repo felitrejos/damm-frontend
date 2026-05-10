@@ -9,17 +9,7 @@ export const driverColumns: ColumnDef<Driver>[] = [
   {
     accessorKey: "name",
     header: "Driver",
-    size: 300,
+    size: 480,
     cell: ({ row }) => <div className="font-medium">{row.original.name}</div>,
-  },
-  {
-    accessorKey: "code",
-    header: "Code",
-    size: 180,
-    cell: ({ row }) => (
-      <div className="tabular-nums text-muted-foreground">
-        {row.original.code}
-      </div>
-    ),
   },
 ];

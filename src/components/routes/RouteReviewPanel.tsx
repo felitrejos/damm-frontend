@@ -24,6 +24,9 @@ import type { SuggestedRoute, SuggestedStop } from "./suggested-routes-mock";
 const BCN_CENTER: [number, number] = [2.1734, 41.3851];
 const BCN_ZOOM = 12;
 
+// Friendly mock zones get hand-picked colors. Anything else (e.g. backend
+// zone_codes like "DD13100050") gets a deterministic color from a hash so
+// each cluster still reads as visually distinct.
 const ZONE_COLORS: Record<string, string> = {
   Eixample: "#f59e0b",
   Gràcia: "#8b5cf6",
@@ -31,8 +34,30 @@ const ZONE_COLORS: Record<string, string> = {
   "Sant Martí": "#ef4444",
   "Ciutat Vella": "#3b82f6",
 };
+const HASH_PALETTE = [
+  "#f59e0b",
+  "#8b5cf6",
+  "#10b981",
+  "#ef4444",
+  "#3b82f6",
+  "#ec4899",
+  "#14b8a6",
+  "#f97316",
+  "#6366f1",
+  "#84cc16",
+];
 const FALLBACK_COLOR = "#64748b";
-const colorForZone = (z: string) => ZONE_COLORS[z] ?? FALLBACK_COLOR;
+
+function hashIndex(s: string, mod: number): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h % mod;
+}
+
+const colorForZone = (z: string) => {
+  if (!z || z === "—") return FALLBACK_COLOR;
+  return ZONE_COLORS[z] ?? HASH_PALETTE[hashIndex(z, HASH_PALETTE.length)]!;
+};
 
 type MappedStop = SuggestedStop & { lat: number; lng: number };
 const isMappable = (s: SuggestedStop): s is MappedStop =>

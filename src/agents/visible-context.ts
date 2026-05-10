@@ -1,5 +1,6 @@
 import "server-only";
 
+import { truckTypeFor } from "@/lib/api/catalog";
 import { getDataSource } from "@/lib/chat/data-source";
 import type { PlannerChatContext } from "@/lib/chat/types";
 import { contextLabelFor } from "@/lib/chat/context";
@@ -31,10 +32,10 @@ async function visibleDataFor(ctx: PlannerChatContext): Promise<{
         surface: "centers_list",
         data: centers.slice(0, maxRows).map((c) => ({
           id: c.id,
-          center: c.center,
-          location: c.location,
-          routes: c.routes,
-          admin: c.admin,
+          name: c.name,
+          city: c.city ?? null,
+          postal_code: c.postal_code ?? null,
+          address: c.address ?? null,
           lat: c.lat ?? null,
           lng: c.lng ?? null,
         })),
@@ -53,19 +54,18 @@ async function visibleDataFor(ctx: PlannerChatContext): Promise<{
         data: {
           center: {
             id: center.id,
-            center: center.center,
-            location: center.location,
-            admin: center.admin,
+            name: center.name,
+            city: center.city ?? null,
             lat: center.lat ?? null,
             lng: center.lng ?? null,
           },
           routeCount: routes.length,
           routes: routes.slice(0, maxRows).map((r) => ({
-            id: r.id,
-            code: r.code,
-            driver_name: r.driver_name,
-            truck_code: r.truck_code,
-            stops: r.stops,
+            transport_id: r.transport_id,
+            route_code: r.route_code,
+            driver_name: r.driver_name ?? null,
+            truck_type: r.truck_type ?? null,
+            stops: r.stop_count,
             date: r.date,
           })),
         },
@@ -76,38 +76,29 @@ async function visibleDataFor(ctx: PlannerChatContext): Promise<{
       if (ctx.selected?.kind !== "route") return null;
       const route = await ds.getRoute(ctx.selected.routeId);
       if (!route) return null;
-      const [truck, stops, depot, center] = await Promise.all([
-        ds.getTruckByCode(route.truck_code),
+      const center =
+        ctx.centerId != null ? await ds.getCenter(ctx.centerId) : null;
+      const [stops, depot] = await Promise.all([
         ds.getStopsForRoute(route),
-        ds.getDepotForCenter(route.centerId),
-        ds.getCenter(route.centerId),
+        ctx.centerId != null
+          ? ds.getDepotForCenter(ctx.centerId)
+          : Promise.resolve(null),
       ]);
       return {
         surface: "route_overview",
         data: {
           route: {
-            id: route.id,
-            code: route.code,
-            driver_name: route.driver_name,
-            truck_code: route.truck_code,
-            stops: route.stops,
+            transport_id: route.transport_id,
+            route_code: route.route_code,
+            driver_name: route.driver_name ?? null,
+            truck_type: route.truck_type ?? null,
+            stops: route.stop_count,
             date: route.date,
-            centerId: route.centerId,
           },
           center: center
-            ? { id: center.id, name: center.center, location: center.location }
+            ? { id: center.id, name: center.name, city: center.city ?? null }
             : null,
           depot,
-          truck: truck
-            ? {
-                id: truck.id,
-                code: truck.code,
-                plate: truck.plate ?? null,
-                truck_type: truck.truck_type,
-                capacity_pallets: truck.capacity_pallets,
-                active: truck.active,
-              }
-            : null,
           ordered_stops: stops.slice(0, maxRows).map((s) => ({
             stop_id: s.stop_id,
             sequence: s.sequence,
@@ -137,12 +128,10 @@ async function visibleDataFor(ctx: PlannerChatContext): Promise<{
             row_count: customers.length,
             rows: customers.slice(0, maxRows).map((c) => ({
               id: c.id,
-              code: c.code,
               name: c.name,
               city: c.city ?? null,
               postal_code: c.postal_code ?? null,
               address: c.address ?? null,
-              payment_condition: c.payment_condition ?? null,
               lat: c.lat ?? null,
               lng: c.lng ?? null,
             })),
@@ -158,7 +147,6 @@ async function visibleDataFor(ctx: PlannerChatContext): Promise<{
             row_count: drivers.length,
             rows: drivers.slice(0, maxRows).map((d) => ({
               id: d.id,
-              code: d.code,
               name: d.name,
             })),
             truncated: drivers.length > maxRows,
@@ -172,11 +160,10 @@ async function visibleDataFor(ctx: PlannerChatContext): Promise<{
           row_count: trucks.length,
           rows: trucks.slice(0, maxRows).map((t) => ({
             id: t.id,
-            code: t.code,
             plate: t.plate ?? null,
-            truck_type: t.truck_type,
+            truck_type: truckTypeFor(t.capacity_pallets),
             capacity_pallets: t.capacity_pallets,
-            active: t.active,
+            warehouse_id: t.warehouse_id ?? null,
           })),
           truncated: trucks.length > maxRows,
         },

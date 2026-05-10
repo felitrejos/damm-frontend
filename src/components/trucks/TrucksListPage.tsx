@@ -26,7 +26,7 @@ export function TrucksListPage({
   useEffect(() => {
     setCrumbs([
       { label: "Trucks", onClick: () => setSelected(null) },
-      ...(selected ? [{ label: selected.code }] : []),
+      ...(selected ? [{ label: selected.plate ?? "Unassigned" }] : []),
     ]);
     return () => setCrumbs([]);
   }, [selected, setCrumbs]);
@@ -67,14 +67,14 @@ export function TrucksListPage({
           <DataTable
             data={trucks}
             columns={truckColumns}
-            getRowId={(row) => row.id.toString()}
-            searchColumnId="code"
+            getRowId={(row) => row.id}
+            searchColumnId="plate"
             searchPlaceholder="Search trucks..."
             searchAriaLabel="Search trucks"
             filterColumnId="truck_type"
             filterLabel="Filter by type"
             filterMobileLabel="Type"
-            selectedRowId={selected?.id.toString() ?? null}
+            selectedRowId={selected?.id ?? null}
             onRowClick={(truck) =>
               setSelected((curr) => (curr?.id === truck.id ? null : truck))
             }

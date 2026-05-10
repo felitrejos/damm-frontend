@@ -67,14 +67,14 @@ export function ClientsListPage({
           <DataTable
             data={clients}
             columns={clientColumns}
-            getRowId={(row) => row.id.toString()}
+            getRowId={(row) => row.id}
             searchColumnId="name"
             searchPlaceholder="Search clients..."
             searchAriaLabel="Search clients"
             filterColumnId="city"
             filterLabel="Filter by city"
             filterMobileLabel="City"
-            selectedRowId={selected?.id.toString() ?? null}
+            selectedRowId={selected?.id ?? null}
             onRowClick={(client) =>
               setSelected((curr) => (curr?.id === client.id ? null : client))
             }

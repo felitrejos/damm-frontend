@@ -91,7 +91,7 @@ export function RouteMapTab({ route, stops, depot }: RouteMapTabProps) {
     return () => {
       cancelled = true;
     };
-  }, [waypoints, route.id]);
+  }, [waypoints, route.transport_id]);
 
   // Build the simulation timeline: travel and service phases keyed by
   // cumulative simulated minutes.
@@ -182,7 +182,7 @@ export function RouteMapTab({ route, stops, depot }: RouteMapTabProps) {
           {osrm && (
             <>
               <MapRoute
-                id={`route-${route.id}-full`}
+                id={`route-${route.transport_id}-full`}
                 coordinates={osrm.coordinates}
                 color="#5b6572"
                 width={5}
@@ -190,7 +190,7 @@ export function RouteMapTab({ route, stops, depot }: RouteMapTabProps) {
                 interactive={false}
               />
               <MapRoute
-                id={`route-${route.id}-progress`}
+                id={`route-${route.transport_id}-progress`}
                 coordinates={
                   truckPos
                     ? osrm.coordinates.slice(0, truckPos.coordIndex + 1)
@@ -210,7 +210,7 @@ export function RouteMapTab({ route, stops, depot }: RouteMapTabProps) {
                 <span className="size-1.5 rounded-full bg-white" />
               </div>
             </MarkerContent>
-            <MarkerTooltip>Depot · {route.code}</MarkerTooltip>
+            <MarkerTooltip>Depot · {route.route_code}</MarkerTooltip>
           </MapMarker>
 
           {stops.map((stop, idx) => {
