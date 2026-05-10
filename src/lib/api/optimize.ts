@@ -126,6 +126,33 @@ export async function persistSuggestedRoute(
   });
 }
 
+// Persist every suggestion of a generated plan in parallel. Returns the
+// per-route results; failures don't abort the rest.
+export async function persistAllSuggestedRoutes(
+  suggestions: SuggestedRoute[],
+  warehouseId: string,
+): Promise<{
+  succeeded: PersistResponse[];
+  failed: Array<{ suggestion: SuggestedRoute; error: unknown }>;
+}> {
+  const settled = await Promise.allSettled(
+    suggestions.map((s) =>
+      persistSuggestedRoute(s, warehouseId).then((res) => ({ s, res })),
+    ),
+  );
+  const succeeded: PersistResponse[] = [];
+  const failed: Array<{ suggestion: SuggestedRoute; error: unknown }> = [];
+  for (let i = 0; i < settled.length; i++) {
+    const r = settled[i]!;
+    if (r.status === "fulfilled") {
+      succeeded.push(r.value.res);
+    } else {
+      failed.push({ suggestion: suggestions[i]!, error: r.reason });
+    }
+  }
+  return { succeeded, failed };
+}
+
 // Build a lookup table customer_id -> zone_code so we can enrich stops with
 // the field RouteReviewPanel uses for clustering.
 function buildZoneIndex(customers: Customer[]): Map<string, string> {
@@ -139,7 +166,7 @@ function buildZoneIndex(customers: Customer[]): Map<string, string> {
 function routeResultToSuggested(
   route: z.infer<typeof RouteResultSchema>,
   zoneByCustomer: Map<string, string>,
-  variantLabel: string,
+  index: number,
 ): SuggestedRoute {
   const ordered_stops: SuggestedStop[] = route.ordered_stops.map((s) => ({
     stop_id: s.stop_id,
@@ -153,8 +180,10 @@ function routeResultToSuggested(
   }));
 
   return {
-    transport_id: `${route.transport_id}-${variantLabel}`,
-    route_code: `${route.route_code} (${variantLabel})`,
+    transport_id: route.transport_id,
+    // Prefix with truck index so the sidebar reads "Truck 1 · OPT-15" etc —
+    // useful when the solver returns N routes for the same plan.
+    route_code: `Truck ${index + 1} · ${route.route_code}`,
     driver_id: route.driver_id ?? "",
     driver_name: route.driver_name ?? "—",
     truck_id: route.vehicle_id ?? "",
@@ -166,65 +195,31 @@ function routeResultToSuggested(
   };
 }
 
-// Three variations to give the user options. They differ on params guaranteed
-// to push the solver toward different solutions:
-//   A — strict time windows, smaller cap (compact)
-//   B — relaxed time windows, larger cap (more stops)
-//   C — force a smaller truck (different vehicle profile)
-const VARIATIONS: Array<{
-  label: string;
-  params: Omit<OptimizeRequest, "date" | "warehouse_id">;
-}> = [
-  {
-    label: "A",
-    params: { max_orders: 15, respect_time_windows: true, solver_time_limit_s: 8 },
-  },
-  {
-    label: "B",
-    params: { max_orders: 30, respect_time_windows: false, solver_time_limit_s: 8 },
-  },
-  {
-    label: "C",
-    params: {
-      max_orders: 20,
-      truck_type: "6pal",
-      respect_time_windows: true,
-      solver_time_limit_s: 8,
-    },
-  },
-];
-
 export type GenerateOptions = {
   date: string;
   warehouseId: string;
 };
 
-// Calls the optimizer N times in parallel and maps each successful result to
-// the SuggestedRoute shape the modal already renders. Failed variations are
-// silently dropped (so a partial backend wobble still yields something).
+// Single solver run that plans the entire day. Returns one SuggestedRoute per
+// truck the solver decided to use (so the modal can show the full plan and
+// the user can save part or all of it). max_orders is set high so the solver
+// has real material to cluster geographically and fill trucks meaningfully.
 export async function generateSuggestedRoutesFromBackend({
   date,
   warehouseId,
 }: GenerateOptions): Promise<SuggestedRoute[]> {
-  const customers = await listCustomers().catch(() => [] as Customer[]);
+  const [customers, result] = await Promise.all([
+    listCustomers().catch(() => [] as Customer[]),
+    optimizePreview({
+      date,
+      warehouse_id: warehouseId,
+      max_orders: 200,
+      respect_time_windows: true,
+      solver_time_limit_s: 25,
+    }),
+  ]);
+
   const zoneIndex = buildZoneIndex(customers);
-
-  const settled = await Promise.allSettled(
-    VARIATIONS.map((v) =>
-      optimizePreview({
-        date,
-        warehouse_id: warehouseId,
-        ...v.params,
-      }).then((res) => ({ variant: v.label, res })),
-    ),
-  );
-
-  const out: SuggestedRoute[] = [];
-  for (const r of settled) {
-    if (r.status !== "fulfilled") continue;
-    const route = r.value.res.route;
-    if (!route) continue;
-    out.push(routeResultToSuggested(route, zoneIndex, r.value.variant));
-  }
-  return out;
+  const routes = result.routes ?? (result.route ? [result.route] : []);
+  return routes.map((r, i) => routeResultToSuggested(r, zoneIndex, i));
 }
