@@ -174,21 +174,20 @@ interface DimensionsProps {
 
 interface TruckWireframeSceneProps {
   visualization: TruckVisualization;
-  hoveredPalletId?: string | null;
+  // Pallet currently in focus — drives the dim/highlight in the 3D scene.
+  // Resolved by the parent as `selectedId ?? hoveredId` so a sticky
+  // selection trumps hover.
+  focusedPalletId?: string | null;
   onHoverPallet?: (id: string | null) => void;
   // Click-to-select. Pass null to clear (also fired on background click).
   onSelectPallet?: (id: string | null) => void;
-  // Bumped by the parent to force the iso camera + OrbitControls to remount,
-  // resetting position / zoom / target back to their iso defaults.
-  resetKey?: number;
 }
 
 export function TruckWireframeScene({
   visualization,
-  hoveredPalletId = null,
+  focusedPalletId = null,
   onHoverPallet,
   onSelectPallet,
-  resetKey = 0,
 }: TruckWireframeSceneProps) {
   return (
     <Canvas
@@ -206,19 +205,16 @@ export function TruckWireframeScene({
       <pointLight position={[5, 8, 4]} intensity={0.8} color="#78e7ff" />
       <pointLight position={[-5, 3, -4]} intensity={0.4} color="#ff6b9a" />
 
-      <IsoCamera key={`cam-${resetKey}`} dimensions={visualization.truck_dims} />
+      <IsoCamera dimensions={visualization.truck_dims} />
       <YardFloor />
       <Stage
         visualization={visualization}
-        hoveredPalletId={hoveredPalletId}
+        focusedPalletId={focusedPalletId}
         onHoverPallet={onHoverPallet}
         onSelectPallet={onSelectPallet}
       />
 
-      {/* The same `resetKey` remounts OrbitControls so internal state (target,
-          spherical deltas, damping inertia) snaps back to the prop defaults. */}
       <OrbitControls
-        key={`ctrl-${resetKey}`}
         makeDefault
         enableDamping
         dampingFactor={0.06}
@@ -302,12 +298,12 @@ function IsoCamera({ dimensions }: DimensionsProps) {
 
 function Stage({
   visualization,
-  hoveredPalletId,
+  focusedPalletId,
   onHoverPallet,
   onSelectPallet,
 }: {
   visualization: TruckVisualization;
-  hoveredPalletId: string | null;
+  focusedPalletId: string | null;
   onHoverPallet?: (id: string | null) => void;
   onSelectPallet?: (id: string | null) => void;
 }) {
@@ -335,7 +331,7 @@ function Stage({
           <Pallets
             pallets={visualization.pallets}
             truck={visualization.truck_dims}
-            hoveredPalletId={hoveredPalletId}
+            focusedPalletId={focusedPalletId}
             onHoverPallet={onHoverPallet}
             onSelectPallet={onSelectPallet}
           />
@@ -484,58 +480,6 @@ function CargoDeck({ dimensions }: DimensionsProps) {
         side={DoubleSide}
       />
     </mesh>
-  );
-}
-
-// =============================================================================
-// Slot grid — subtle grid drawn on top of the deck (slot dimensions).
-// =============================================================================
-
-function CargoSlotGrid({ dimensions }: DimensionsProps) {
-  const slotLengthCm = 120;
-  const slotWidthCm = 80;
-  const slotsLong = Math.max(1, Math.floor(dimensions.length_cm / slotLengthCm));
-  const slotsWide = Math.max(1, Math.floor(dimensions.width_cm / slotWidthCm));
-  const usedLength = slotsLong * slotLengthCm;
-  const usedWidth = slotsWide * slotWidthCm;
-  const offsetX = (dimensions.length_cm - usedLength) / 2;
-  const offsetY = (dimensions.width_cm - usedWidth) / 2;
-  const z = 1.2;
-
-  const lines: Array<[PositionCm, PositionCm]> = [];
-
-  for (let i = 0; i <= slotsLong; i += 1) {
-    const x = offsetX + i * slotLengthCm;
-    lines.push([
-      { x, y: offsetY, z },
-      { x, y: offsetY + usedWidth, z },
-    ]);
-  }
-
-  for (let j = 0; j <= slotsWide; j += 1) {
-    const y = offsetY + j * slotWidthCm;
-    lines.push([
-      { x: offsetX, y, z },
-      { x: offsetX + usedLength, y, z },
-    ]);
-  }
-
-  return (
-    <group>
-      {lines.map((segment, index) => (
-        <Line
-          key={index}
-          points={[
-            toScenePos(segment[0], dimensions),
-            toScenePos(segment[1], dimensions),
-          ]}
-          color={COLOR.gridPrimary}
-          lineWidth={0.5}
-          transparent
-          opacity={0.22}
-        />
-      ))}
-    </group>
   );
 }
 
@@ -700,7 +644,7 @@ function Cabin({ dimensions }: DimensionsProps) {
 interface PalletsProps {
   pallets: VizPallet[];
   truck: DimensionsCm;
-  hoveredPalletId: string | null;
+  focusedPalletId: string | null;
   onHoverPallet?: (id: string | null) => void;
   onSelectPallet?: (id: string | null) => void;
 }
@@ -715,22 +659,22 @@ const PALLET_Z_LIFT_SCENE = 0.03;
 function Pallets({
   pallets,
   truck,
-  hoveredPalletId,
+  focusedPalletId,
   onHoverPallet,
   onSelectPallet,
 }: PalletsProps) {
-  const isAnyHovered = hoveredPalletId !== null;
+  const isAnyFocused = focusedPalletId !== null;
   return (
     <group position={[0, PALLET_Z_LIFT_SCENE, 0]}>
       {pallets.map((pallet) => {
-        const isHovered = hoveredPalletId === pallet.pallet_id;
+        const isFocused = focusedPalletId === pallet.pallet_id;
         return (
           <Pallet
             key={pallet.pallet_id}
             pallet={pallet}
             truck={truck}
-            isHovered={isHovered}
-            dimmed={isAnyHovered && !isHovered}
+            isFocused={isFocused}
+            dimmed={isAnyFocused && !isFocused}
             onHover={onHoverPallet}
             onSelect={onSelectPallet}
           />
@@ -743,8 +687,8 @@ function Pallets({
 interface PalletProps {
   pallet: VizPallet;
   truck: DimensionsCm;
-  isHovered: boolean;
-  // Some other pallet is hovered — fade this one heavily so the hovered
+  isFocused: boolean;
+  // Some other pallet is focused — fade this one heavily so the focused
   // pallet reads through any pallets that occlude it from the camera.
   dimmed: boolean;
   onHover?: (id: string | null) => void;
@@ -762,7 +706,7 @@ const LAYER_GAP_CM = 0.4; // visible seam between layers
 function Pallet({
   pallet,
   truck,
-  isHovered,
+  isFocused,
   dimmed,
   onHover,
   onSelect,
@@ -1058,7 +1002,7 @@ function Pallet({
       )}
 
       <group position={baseCenter}>
-        <mesh renderOrder={isHovered ? 10 : 0} raycast={noRaycast}>
+        <mesh renderOrder={isFocused ? 10 : 0} raycast={noRaycast}>
           <boxGeometry args={[baseLength, baseHeightUnit, baseWidth]} />
           <meshBasicMaterial
             ref={baseMatRef}
@@ -1082,13 +1026,13 @@ function Pallet({
             <mesh
               geometry={layerGeo}
               material={layerFillMat}
-              renderOrder={isHovered ? 10 : 0}
+              renderOrder={isFocused ? 10 : 0}
               raycast={noRaycast}
             />
             <lineSegments
               geometry={layerEdgesGeo}
               material={layerEdgeMat}
-              renderOrder={isHovered ? 11 : 1}
+              renderOrder={isFocused ? 11 : 1}
               raycast={noRaycast}
             />
           </group>
@@ -1101,13 +1045,13 @@ function Pallet({
             <mesh
               geometry={barrelGeo}
               material={layerFillMat}
-              renderOrder={isHovered ? 10 : 0}
+              renderOrder={isFocused ? 10 : 0}
               raycast={noRaycast}
             />
             <lineSegments
               geometry={barrelEdgesGeo}
               material={layerEdgeMat}
-              renderOrder={isHovered ? 11 : 1}
+              renderOrder={isFocused ? 11 : 1}
               raycast={noRaycast}
             />
           </group>

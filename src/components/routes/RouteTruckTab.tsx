@@ -72,7 +72,7 @@ export function RouteTruckTab({
       >
         <TruckWireframeScene
           visualization={visualization}
-          hoveredPalletId={focusId}
+          focusedPalletId={focusId}
           onHoverPallet={setHoveredId}
           onSelectPallet={handleSelectPallet}
         />
@@ -177,11 +177,22 @@ function PalletList({
           return (
             <li
               key={pallet.pallet_id}
+              role="button"
+              tabIndex={0}
+              aria-pressed={isSelected}
               onMouseEnter={() => onHover(pallet.pallet_id)}
               onMouseLeave={() => onHover(null)}
+              onFocus={() => onHover(pallet.pallet_id)}
+              onBlur={() => onHover(null)}
               onClick={() => onSelect(pallet.pallet_id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelect(pallet.pallet_id);
+                }
+              }}
               className={cn(
-                "rounded-md border transition-colors cursor-pointer",
+                "rounded-md border transition-colors cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-white/40",
                 active
                   ? "border-white/30 bg-surface-3"
                   : "border-border bg-surface-1 hover:border-white/15",
@@ -271,13 +282,17 @@ function PalletDetail({ pallet }: { pallet: VizPallet }) {
           {pallet.total_weight_kg > 0 && (
             <span>
               <span className="text-ink-tertiary">Weight: </span>
-              <span className="tabular-nums">{pallet.total_weight_kg} kg</span>
+              <span className="tabular-nums">
+                {pallet.total_weight_kg.toFixed(1)} kg
+              </span>
             </span>
           )}
           {pallet.total_volume_l > 0 && (
             <span>
               <span className="text-ink-tertiary">Volume: </span>
-              <span className="tabular-nums">{pallet.total_volume_l} L</span>
+              <span className="tabular-nums">
+                {pallet.total_volume_l.toFixed(1)} L
+              </span>
             </span>
           )}
         </div>

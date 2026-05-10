@@ -18,14 +18,21 @@ import type {
 } from "./types";
 
 export function adaptTruckLayout(layout: TruckLayout): TruckVisualization {
-  const occupied = layout.slots.filter((s) => !s.is_return);
-  const occupiedKeys = new Set(occupied.map((s) => slotKey(s.column, s.row)));
+  // Slots we render as full pallets. Backend `is_empty` slots and the
+  // returnable pallet are filtered out — empty cells become bare-base
+  // placeholders below; returnables are deferred for v1.
+  const keptSlots = layout.slots.filter(
+    (s) => !s.is_return && !s.is_empty && inGridBounds(s, layout),
+  );
+  const filledKeys = new Set(keptSlots.map((s) => slotKey(s.column, s.row)));
 
-  const real = occupied.map((slot) => slotToPallet(slot, layout.pallet_dims_cm));
+  const real = keptSlots.map((slot) =>
+    slotToPallet(slot, layout.pallet_dims_cm),
+  );
   const empties: VizPallet[] = [];
   for (let row = 1; row <= layout.rows; row++) {
     for (let col = 0; col < layout.columns; col++) {
-      if (occupiedKeys.has(slotKey(col, row))) continue;
+      if (filledKeys.has(slotKey(col, row))) continue;
       empties.push(emptyPallet(col, row, layout.pallet_dims_cm));
     }
   }
@@ -36,6 +43,22 @@ export function adaptTruckLayout(layout: TruckLayout): TruckVisualization {
     pallets: [...real, ...empties],
     route_geojson: null,
   };
+}
+
+// Defensive guard against malformed wire payloads. A slot with row/column
+// outside the declared grid would render at negative scene X/Y. Log + drop.
+function inGridBounds(slot: TruckSlot, layout: TruckLayout): boolean {
+  const ok =
+    slot.row >= 1 &&
+    slot.row <= layout.rows &&
+    slot.column >= 0 &&
+    slot.column < layout.columns;
+  if (!ok && typeof console !== "undefined") {
+    console.warn(
+      `[palletAdapter] slot ${slot.pallet_id} out of grid bounds (col=${slot.column}, row=${slot.row}; grid=${layout.columns}x${layout.rows}); dropping`,
+    );
+  }
+  return ok;
 }
 
 function slotKey(col: number, row: number) {
